@@ -1,0 +1,13 @@
+#version 120
+
+uniform sampler2D texUnit;
+uniform float fadeFactor;
+
+varying vec2 texcoord;
+
+void main()
+{
+	vec4 col = texture2D(texUnit, texcoord);
+	gl_FragColor.xyz = col.xyz;
+	gl_FragColor.w = fadeFactor;
+}
