@@ -123,6 +123,20 @@ enum PRIORITY_LEVELS {
 	PRIORITY_LEVEL_HIGHEST
 };
 
+#ifdef JOEL_REMOVED
+static void __CheckGL(const char *callerFile, int callerLine)
+{
+	GLenum e = glGetError();
+
+	if (e != GL_NO_ERROR)
+	{
+		LOG_MSG("OpenGL Error in module \"%s\", line %d: glGetError() returned %x", callerFile, callerLine, e);
+	}
+}
+
+#define CheckGL			__CheckGL(__FILE__, __LINE__)
+
+#endif
 
 struct SDL_Block {
 	bool inited;
@@ -156,7 +170,9 @@ struct SDL_Block {
 		Bitu pitch;
 		void * framebuf;
 		GLuint texture;
+#ifndef JOEL_REMOVED
 		GLuint displaylist;
+#endif
 		GLint max_texsize;
 		bool bilinear;
 		bool packed_pixel;
@@ -206,13 +222,32 @@ struct SDL_Block {
 	PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray;
 	PFNGLDISABLEVERTEXATTRIBARRAYPROC glDisableVertexAttribArray;
 	PFNGLACTIVETEXTUREPROC glActiveTexture;
+	PFNGLGETACTIVEATTRIBPROC glGetActiveAttrib;
+	PFNGLGETACTIVEUNIFORMPROC glGetActiveUniform;
 
 	GLuint vsSimple;
 	GLuint psSimple;
 	GLuint progSimple;
+
+	GLuint vsPalette;
+	GLuint psPalette;
+	GLuint progPalette;
+
 	GLuint vertBuffer;
 	GLuint idxBuffer;
-	SDL_Renderer * renderer;
+
+	GLint simpleTexUnitAddr;
+	GLint simpleFadeFactorAddr;
+	GLint simplePositionAddr;
+
+	GLint palTexUnitAddr;
+	GLint palPalUnitAddr;
+	GLint palPositionAddr;
+
+	GLuint texPalette;
+
+	unsigned nextRenderLineNum;
+//	SDL_Renderer * renderer;
 #endif
 	SDL_cond *cond;
 	struct {
@@ -358,9 +393,13 @@ check_gotbpp:
 #endif	// JOEL_REMOVED
 #if C_OPENGL
 	case SCREEN_OPENGL:
+#ifndef JOEL_REMOVED
 		if (flags & GFX_RGBONLY || !(flags&GFX_CAN_32)) goto check_surface;
 		flags|=GFX_SCALING;
 		flags&=~(GFX_CAN_8|GFX_CAN_15|GFX_CAN_16);
+#else
+		flags = GFX_CAN_8|GFX_CAN_15|GFX_CAN_16|GFX_CAN_32|GFX_CAN_RANDOM;
+#endif
 		break;
 #endif
 	default:
@@ -697,10 +736,27 @@ dosurface:
 		}
 		sdl.opengl.pitch=width*4;
 		glViewport(sdl.clip.x,sdl.clip.y,sdl.clip.w,sdl.clip.h);
-		glMatrixMode (GL_PROJECTION);
+		CheckGL;
 		glDeleteTextures(1,&sdl.opengl.texture);
+		CheckGL;
  		glGenTextures(1,&sdl.opengl.texture);
+		CheckGL;
+		sdl.glActiveTexture(GL_TEXTURE0);
+		CheckGL;
 		glBindTexture(GL_TEXTURE_2D,sdl.opengl.texture);
+		CheckGL;
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, sdl.clip.w, sdl.clip.h, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, NULL);
+		CheckGL;
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		CheckGL;
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		CheckGL;
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		CheckGL;
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		CheckGL;
+#ifndef JOEL_REMOVED
+		glMatrixMode (GL_PROJECTION);
 		// No borders
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
@@ -716,11 +772,7 @@ dosurface:
 
 		glClearColor (0.0, 0.0, 0.0, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT);
-#ifndef JOEL_REMOVED
 		SDL_GL_SwapBuffers();
-#else
-		SDL_GL_SwapWindow(sdl.window);
-#endif
 		glClear(GL_COLOR_BUFFER_BIT);
 		glShadeModel (GL_FLAT);
 		glDisable (GL_DEPTH_TEST);
@@ -748,6 +800,7 @@ dosurface:
 		glTexCoord2f(0,0); glVertex2f(-1.0f, 1.0f);
 		glEnd();
 		glEndList();
+#endif	// JOEL_REMOVED
 		sdl.desktop.type=SCREEN_OPENGL;
 		retFlags = GFX_CAN_32 | GFX_SCALING;
 	break;
@@ -848,15 +901,62 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 #endif	// JOEL_REMOVED
 #if C_OPENGL
 	case SCREEN_OPENGL:
-		pixels=(Bit8u *)sdl.opengl.framebuf;
-		pitch=sdl.opengl.pitch;
+		//pixels=(Bit8u *)sdl.opengl.framebuf;
+		//pitch=sdl.opengl.pitch;
+		pixels = 0;
+		pitch = 0;
+		sdl.nextRenderLineNum = 0;
 		sdl.updating=true;
+		sdl.glActiveTexture(GL_TEXTURE0);
+		CheckGL;
+		glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
+		CheckGL;
 		return true;
 #endif
 	default:
 		break;
 	}
 	return false;
+}
+
+static unsigned char g_testLineBuf[720 * 480];
+
+void GFX_LineHandler8(const void * src)
+{
+	memcpy(g_testLineBuf + (sdl.nextRenderLineNum * 720), src, sdl.draw.width);
+
+	sdl.glActiveTexture(GL_TEXTURE0);
+	CheckGL;
+    glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
+	CheckGL;
+
+	glTexSubImage2D(GL_TEXTURE_2D, 
+					0,
+					0, sdl.nextRenderLineNum++,
+					sdl.draw.width, 1,
+					GL_LUMINANCE, GL_UNSIGNED_BYTE,
+					src);
+
+}
+
+void GFX_LineHandler16(const void * src)
+{
+	glTexSubImage2D(GL_TEXTURE_2D, 
+					0,
+					0, sdl.nextRenderLineNum++,
+					sdl.draw.width, 1,
+					GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
+					src);
+}
+
+void GFX_LineHandler32(const void * src)
+{
+	glTexSubImage2D(GL_TEXTURE_2D, 
+					0,
+					0, sdl.nextRenderLineNum++,
+					sdl.draw.width, 1,
+					GL_BGRA_EXT, GL_UNSIGNED_INT_8_8_8_8_REV,
+					src);
 }
 
 
@@ -930,6 +1030,7 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 #endif	// JOEL_REMOVED
 #if C_OPENGL
 	case SCREEN_OPENGL:
+#ifndef JOEL_REMOVED
 		if (changedLines) {
 			Bitu y = 0, index = 0;
             glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
@@ -947,14 +1048,50 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 				index++;
 			}
 			glCallList(sdl.opengl.displaylist);
-#ifndef JOEL_REMOVED
 			SDL_GL_SwapBuffers();
 #else
+			sdl.glActiveTexture(GL_TEXTURE0);
+			CheckGL;
+            glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
+			CheckGL;
+			sdl.glActiveTexture(GL_TEXTURE1);
+			CheckGL;
+			glBindTexture(GL_TEXTURE_2D, sdl.texPalette);
+			CheckGL;
+
+			sdl.glUseProgram(sdl.progPalette);
+			CheckGL;
+
+			sdl.glUniform1i(sdl.palTexUnitAddr, 0);
+			CheckGL;
+			sdl.glUniform1i(sdl.palPalUnitAddr, 1);
+			CheckGL;
+
+			sdl.glBindBuffer(GL_ARRAY_BUFFER, sdl.vertBuffer);
+			CheckGL;
+			sdl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sdl.idxBuffer);
+			CheckGL;
+			sdl.glVertexAttribPointer(sdl.palPositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
+			CheckGL;
+
+			sdl.glEnableVertexAttribArray(sdl.palPositionAddr);
+			CheckGL;
+			glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
+			CheckGL;
+			sdl.glDisableVertexAttribArray(sdl.palPositionAddr);
+			CheckGL;
+
+			// Check for palettized vs. bitmapped
+			//
+			//if (sdl.
+			//glTexImage2D(
 			SDL_GL_SwapWindow(sdl.window);
 #endif
+#ifndef JOEL_REMOVED
 		}
-		break;
 #endif
+		break;
+#endif	// C_OPENGL
 	default:
 		break;
 	}
@@ -973,6 +1110,16 @@ void GFX_SetPalette(Bitu start,Bitu count,GFX_PalEntry * entries) {
 			E_Exit("SDL:Can't set palette");
 		}
 	}
+#else
+	// The palette is just a 1-dimensional texture.
+	// It's the 2nd texture, stored at index 1
+	//
+	sdl.glActiveTexture(GL_TEXTURE1);
+	CheckGL;
+	glBindTexture(GL_TEXTURE_2D, sdl.texPalette);
+	CheckGL;
+	glTexSubImage2D(GL_TEXTURE_2D, 0, start, 0, count, 1, GL_RGBA, GL_UNSIGNED_BYTE, entries);
+	CheckGL;
 #endif
 }
 
@@ -1023,6 +1170,10 @@ static void GUI_ShutDown(Section * /*sec*/) {
 		if (sdl.progSimple)
 		{
 			sdl.glDeleteProgram(sdl.progSimple);
+		}
+		if (sdl.progPalette)
+		{
+			sdl.glDeleteProgram(sdl.progPalette);
 		}
 		if (sdl.context)
 		{
@@ -1093,6 +1244,7 @@ static void SetPriority(PRIORITY_LEVELS level) {
 }
 
 extern Bit8u int10_font_14[256 * 14];
+#ifndef JOEL_REMOVED
 static void OutputString(Bitu x,Bitu y,const char * text,Bit32u color,Bit32u color2,SDL_Surface * output_surface) {
 	Bit32u * draw=(Bit32u*)(((Bit8u *)output_surface->pixels)+((y)*output_surface->pitch))+x;
 	while (*text) {
@@ -1111,14 +1263,42 @@ static void OutputString(Bitu x,Bitu y,const char * text,Bit32u color,Bit32u col
 		draw+=8;
 	}
 }
+#else
+
+static const int gc_warningTexWidth = 640;
+static const int gc_warningTexHeight = 400;
+static const int gc_warningTexBytesPerPixel = 4;
+
+static void OutputStringGL(Bitu x,Bitu y,const char * text,Bit32u color,Bit32u color2,GLubyte* pDestBuffer) {
+	Bit32u * draw=(Bit32u*)(((Bit8u *)pDestBuffer)+((y)*(gc_warningTexWidth * gc_warningTexBytesPerPixel)))+x;
+	while (*text) {
+		Bit8u * font=&int10_font_14[(*text)*14];
+		Bitu i,j;
+		Bit32u * draw_line=draw;
+		for (i=0;i<14;i++) {
+			Bit8u map=*font++;
+			for (j=0;j<8;j++) {
+				if (map & 0x80) *((Bit32u*)(draw_line+j))=color; else *((Bit32u*)(draw_line+j))=color2;
+				map<<=1;
+			}
+			draw_line+=(gc_warningTexWidth * gc_warningTexBytesPerPixel)/4;
+		}
+		text++;
+		draw+=8;
+	}
+}
+#endif
 
 static GLuint CreateObjectBuffer(GLenum target, const void *buffer_data, GLsizei buffer_size) 
 {
     GLuint buffer;
 
     sdl.glGenBuffers(1, &buffer);
+	CheckGL;
     sdl.glBindBuffer(target, buffer);
+	CheckGL;
     sdl.glBufferData(target, buffer_size, buffer_data, GL_STATIC_DRAW);
+	CheckGL;
 
     return buffer;
 }
@@ -1126,28 +1306,77 @@ static GLuint CreateObjectBuffer(GLenum target, const void *buffer_data, GLsizei
 static GLuint CreateProgram(GLuint vertexShader, GLuint fragmentShader)
 {
 	GLuint prog = sdl.glCreateProgram();
+	CheckGL;
 
 	sdl.glAttachShader(prog, vertexShader);
+	CheckGL;
 	sdl.glAttachShader(prog, fragmentShader);
+	CheckGL;
 	sdl.glLinkProgram(prog);
+	CheckGL;
 
 	GLint linkResult;
 	GLint logLength;
 
 	sdl.glGetProgramiv(prog, GL_LINK_STATUS, &linkResult);
+	CheckGL;
 	sdl.glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &logLength);
+	CheckGL;
 
 	if (logLength > 0)
 	{
 		char *szLogBuffer = (char*)malloc(logLength);
 		szLogBuffer[0] = '\0';
 		sdl.glGetProgramInfoLog(prog, logLength, NULL, szLogBuffer);
-		LOG_MSG("Results of linking: %s\n", szLogBuffer);
+		CheckGL;
+		LOG_MSG("Results of linking: %s", szLogBuffer);
 		free(szLogBuffer);
 	}
 	else
 	{
-		LOG_MSG("Results of linking: %s\n", linkResult == GL_TRUE ? "GL_TRUE" : "GL_FALSE");
+		GLint numActiveAttribs = 0;
+		GLint numActiveUniforms = 0;
+
+		sdl.glUseProgram(prog);
+		CheckGL;
+		sdl.glGetProgramiv(prog, GL_ACTIVE_ATTRIBUTES, &numActiveAttribs);
+		CheckGL;
+		sdl.glGetProgramiv(prog, GL_ACTIVE_UNIFORMS, &numActiveUniforms);
+		CheckGL;
+
+		char *progSummary = (char*)malloc(64 * 1024);
+		strcpy(progSummary, "Linked. Attributes:\n");
+
+		for (int i = 0; i < numActiveAttribs; i++)
+		{
+			GLint arraySize = 0;
+			GLenum type = 0;
+			GLsizei actualLength = 0;
+			char nameBuf[256];
+
+			sdl.glGetActiveAttrib(prog, i, 256, &actualLength, &arraySize, &type, nameBuf);
+			CheckGL;
+
+			strcat(progSummary, nameBuf);
+			strcat(progSummary, "\n");
+		}
+
+		strcat(progSummary, "Uniforms:\n");
+		for (int i = 0; i < numActiveUniforms; i++)
+		{
+			GLint arraySize = 0;
+			GLenum type = 0;
+			GLsizei actualLength = 0;
+			char nameBuf[256];
+
+			sdl.glGetActiveUniform(prog, i, 256, &actualLength, &arraySize, &type, nameBuf);
+			CheckGL;
+
+			strcat(progSummary, nameBuf);
+			strcat(progSummary, "\n");
+		}
+		LOG_MSG("%s", progSummary);
+		free(progSummary);
 	}
 
 	if (linkResult == GL_TRUE)
@@ -1199,26 +1428,31 @@ static GLuint LoadShader(const char *szShaderFile, GLenum shaderType)
 	fclose(fp);
 
 	GLuint shaderProg = sdl.glCreateShader(shaderType);
+	CheckGL;
 	sdl.glShaderSource(shaderProg, codeLine - 1, rgszShaderCodeLine, NULL);
+	CheckGL;
 	sdl.glCompileShader(shaderProg);
+	CheckGL;
 
 	GLint compileResult;
 	GLint logLength;
 
 	sdl.glGetShaderiv(shaderProg, GL_COMPILE_STATUS, &compileResult);
+	CheckGL;
 	sdl.glGetShaderiv(shaderProg, GL_INFO_LOG_LENGTH, &logLength);
+	CheckGL;
 
 	if (logLength > 0)
 	{
 		char *szLogBuffer = (char*)malloc(logLength);
 		szLogBuffer[0] = '\0';
 		sdl.glGetShaderInfoLog(shaderProg, logLength, NULL, szLogBuffer);
-		LOG_MSG("Results of compiling \"%s\": %s\n", szShaderFile, szLogBuffer);
+		LOG_MSG("Results of compiling \"%s\": %s", szShaderFile, szLogBuffer);
 		free(szLogBuffer);
 	}
 	else
 	{
-		LOG_MSG("Results of compiling \"%s\": %s\n", szShaderFile, compileResult == GL_TRUE ? "GL_TRUE" : "GL_FALSE");
+		LOG_MSG("Results of compiling \"%s\": %s", szShaderFile, compileResult == GL_TRUE ? "GL_TRUE" : "GL_FALSE");
 	}
 
 	for (int i = 0; i < codeLine; i++)
@@ -1241,10 +1475,10 @@ static GLuint LoadShader(const char *szShaderFile, GLenum shaderType)
 
 #ifdef JOEL_REMOVED
 static const GLfloat g_vertex_buffer_data[] = { 
-    -1.0f, -1.0f,
-     1.0f, -1.0f,
     -1.0f,  1.0f,
-     1.0f,  1.0f
+    -1.0f, -1.0f,
+     1.0f,  1.0f,
+     1.0f, -1.0f
 };
 static const GLubyte g_element_buffer_data[] = { 0, 1, 2, 3 };
 #endif
@@ -1410,7 +1644,9 @@ static void GUI_StartUp(Section * sec) {
 #endif	// JOEL_REMOVED
 	sdl.opengl.framebuf=0;
 	sdl.opengl.texture=0;
+#ifndef JOEL_REMOVED
 	sdl.opengl.displaylist=0;
+#endif
 	// Expect minimum 15-bit color
 	//
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 5);
@@ -1431,6 +1667,8 @@ static void GUI_StartUp(Section * sec) {
 	sdl.context = SDL_GL_CreateContext(sdl.window);
 
 	glGetIntegerv (GL_MAX_TEXTURE_SIZE, &sdl.opengl.max_texsize);
+	CheckGL;
+
 
 	// We use OpenGL 2.1 prototypes. This is around 2006 - 2007 era of tech,
 	// but at that time only high-end PCs would have graphics cards capable of this.
@@ -1458,13 +1696,40 @@ static void GUI_StartUp(Section * sec) {
 	sdl.glEnableVertexAttribArray = (PFNGLENABLEVERTEXATTRIBARRAYPROC)SDL_GL_GetProcAddress("glEnableVertexAttribArray");
 	sdl.glDisableVertexAttribArray = (PFNGLDISABLEVERTEXATTRIBARRAYPROC)SDL_GL_GetProcAddress("glDisableVertexAttribArray");
 	sdl.glActiveTexture = (PFNGLACTIVETEXTUREPROC)SDL_GL_GetProcAddress("glActiveTexture");
+	sdl.glGetActiveAttrib = (PFNGLGETACTIVEATTRIBPROC)SDL_GL_GetProcAddress("glGetActiveAttrib");
+	sdl.glGetActiveUniform = (PFNGLGETACTIVEUNIFORMPROC)SDL_GL_GetProcAddress("glGetActiveUniform");
 
 	sdl.vertBuffer = CreateObjectBuffer(GL_ARRAY_BUFFER, g_vertex_buffer_data, sizeof(g_vertex_buffer_data));
+	CheckGL;
 	sdl.idxBuffer = CreateObjectBuffer(GL_ELEMENT_ARRAY_BUFFER, g_element_buffer_data, sizeof(g_element_buffer_data));
+	CheckGL;
 
 	sdl.vsSimple = LoadShader("simple.vs", GL_VERTEX_SHADER);
 	sdl.psSimple = LoadShader("simple.ps", GL_FRAGMENT_SHADER);
 	sdl.progSimple = CreateProgram(sdl.vsSimple, sdl.psSimple);
+
+	// Vertex shader is the same
+	sdl.vsPalette = LoadShader("pal.vs", GL_VERTEX_SHADER);
+	sdl.psPalette = LoadShader("pal.ps", GL_FRAGMENT_SHADER);
+	sdl.progPalette = CreateProgram(sdl.vsPalette, sdl.psPalette);
+
+	glGenTextures(1, &sdl.texPalette);
+	CheckGL;
+
+	sdl.glActiveTexture(GL_TEXTURE1);
+	CheckGL;
+	glBindTexture(GL_TEXTURE_2D, sdl.texPalette);
+	CheckGL;
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	CheckGL;
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	CheckGL;
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	CheckGL;
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
+	CheckGL;
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
+	CheckGL;
 
 	const char * gl_ext = (const char *)glGetString (GL_EXTENSIONS);
 	if(gl_ext && *gl_ext)
@@ -1499,46 +1764,79 @@ static void GUI_StartUp(Section * sec) {
 #endif
 
 #ifdef JOEL_REMOVED
-	glEnable(GL_TEXTURE_2D);
-
 	GLuint splashTex;
 	glGenTextures(1, &splashTex);
+	CheckGL;
 
 	if (splashTex)
 	{
 		sdl.glActiveTexture(GL_TEXTURE0);
+		CheckGL;
 		glBindTexture(GL_TEXTURE_2D, splashTex);
+		CheckGL;
 
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		CheckGL;
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		CheckGL;
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
+		CheckGL;
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
+		CheckGL;
 
-		glDisable(GL_DEPTH);
+		glDisable(GL_DEPTH_TEST);
+		CheckGL;
 		glDepthMask(0);
+		CheckGL;
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		CheckGL;
+		//glEnable(GL_TEXTURE_2D);
 		glEnable(GL_BLEND);
+		CheckGL;
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		CheckGL;
 
 		Bit8u* tmpbufp = new Bit8u[640*400*3];
 		GIMP_IMAGE_RUN_LENGTH_DECODE(tmpbufp,gimp_image.rle_pixel_data,640*400,3);
 
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 640, 400, 0, GL_RGB, GL_UNSIGNED_BYTE, tmpbufp);
+		CheckGL;
 		
-		GLint texUnit = sdl.glGetUniformLocation(sdl.progSimple, "texUnit");
-		GLint fadeFactor = sdl.glGetUniformLocation(sdl.progSimple, "fadeFactor");
-		GLint vecPos = sdl.glGetAttribLocation(sdl.progSimple, "position");
+		sdl.glUseProgram(sdl.progSimple);
+		CheckGL;
+		sdl.simpleTexUnitAddr = sdl.glGetUniformLocation(sdl.progSimple, "texUnit");
+		CheckGL;
+		sdl.simpleFadeFactorAddr = sdl.glGetUniformLocation(sdl.progSimple, "fadeFactor");
+		CheckGL;
+		sdl.simplePositionAddr = sdl.glGetAttribLocation(sdl.progSimple, "position");
+		CheckGL;
+
+		sdl.glUseProgram(sdl.progPalette);
+		CheckGL;
+		sdl.palTexUnitAddr = sdl.glGetUniformLocation(sdl.progPalette, "texUnit");
+		CheckGL;
+		sdl.palPalUnitAddr = sdl.glGetUniformLocation(sdl.progPalette, "palUnit");
+		CheckGL;
+		sdl.palPositionAddr = sdl.glGetAttribLocation(sdl.progPalette, "position");
+		CheckGL;
 
 		sdl.glUseProgram(sdl.progSimple);
+		CheckGL;
 
-		sdl.glUniform1f(fadeFactor, 1.0);
-		sdl.glUniform1i(texUnit, 0);
+		sdl.glUniform1f(sdl.simpleFadeFactorAddr, 1.0);
+		CheckGL;
+		sdl.glUniform1i(sdl.simpleTexUnitAddr, 0);
+		CheckGL;
 
 		sdl.glBindBuffer(GL_ARRAY_BUFFER, sdl.vertBuffer);
-		sdl.glVertexAttribPointer(vecPos, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
-		sdl.glEnableVertexAttribArray(vecPos);
+		CheckGL;
+		sdl.glVertexAttribPointer(sdl.simplePositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
+		CheckGL;
+		sdl.glEnableVertexAttribArray(sdl.simplePositionAddr);
+		CheckGL;
 
 		sdl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sdl.idxBuffer);
+		CheckGL;
 
 		delete [] tmpbufp;
 
@@ -1562,10 +1860,15 @@ static void GUI_StartUp(Section * sec) {
 			if (ct<1) 
 			{
 				glClear(GL_COLOR_BUFFER_BIT);
-				sdl.glUniform1f(fadeFactor, curFadeFactor);
-				sdl.glEnableVertexAttribArray(vecPos);
+				CheckGL;
+				sdl.glUniform1f(sdl.simpleFadeFactorAddr, curFadeFactor);
+				CheckGL;
+				sdl.glEnableVertexAttribArray(sdl.simplePositionAddr);
+				CheckGL;
 				glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
-				sdl.glDisableVertexAttribArray(vecPos);
+				CheckGL;
+				sdl.glDisableVertexAttribArray(sdl.simplePositionAddr);
+				CheckGL;
 				SDL_GL_SwapWindow(sdl.window);
 			}
 			else if (ct>=max_splash_loop-splash_fade) 
@@ -1573,11 +1876,16 @@ static void GUI_StartUp(Section * sec) {
 				if (use_fadeout) 
 				{
 					glClear(GL_COLOR_BUFFER_BIT);
+					CheckGL;
 					curFadeFactor = 1.0f - ((ct - (max_splash_loop-splash_fade)) / (float)splash_fade);
-					sdl.glUniform1f(fadeFactor, curFadeFactor);
-					sdl.glEnableVertexAttribArray(vecPos);
+					sdl.glUniform1f(sdl.simpleFadeFactorAddr, curFadeFactor);
+					CheckGL;
+					sdl.glEnableVertexAttribArray(sdl.simplePositionAddr);
+					CheckGL;
 					glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
-					sdl.glDisableVertexAttribArray(vecPos);
+					CheckGL;
+					sdl.glDisableVertexAttribArray(sdl.simplePositionAddr);
+					CheckGL;
 					SDL_GL_SwapWindow(sdl.window);
 				}
 			}
@@ -1586,8 +1894,12 @@ static void GUI_StartUp(Section * sec) {
 		if (use_fadeout) 
 		{
 			glClear(GL_COLOR_BUFFER_BIT);
+			CheckGL;
 			SDL_GL_SwapWindow(sdl.window);
 		}
+
+		sdl.glUseProgram(sdl.progPalette);
+		CheckGL;
 	}
 
 #else
@@ -2076,8 +2388,16 @@ static void show_warning(char const * const message) {
 	Bit32u gmask = 0x0000ff00;                    
 	Bit32u bmask = 0x00ff0000;
 #endif
+#ifndef JOEL_REMOVED
 	SDL_Surface* splash_surf = SDL_CreateRGBSurface(SDL_SWSURFACE, 640, 400, 32, rmask, gmask, bmask, 0);
 	if (!splash_surf) return;
+#else
+	GLuint splashTex = 0;
+	glGenTextures(1, &splashTex);
+	sdl.glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, splashTex);
+	GLubyte *surfaceBuffer = (GLubyte*)calloc(gc_warningTexWidth * gc_warningTexHeight * gc_warningTexBytesPerPixel, sizeof(GLubyte));
+#endif
 
 	int x = 120,y = 20;
 	std::string m(message),m2;
@@ -2089,7 +2409,11 @@ static void show_warning(char const * const message) {
 		if(c>d) a=b=d; else a=b=c;
 		if( a != std::string::npos) b++; 
 		m2 = m.substr(0,a); m.erase(0,b);
+#ifndef JOEL_REMOVED
 		OutputString(x,y,m2.c_str(),0xffffffff,0,splash_surf);
+#else
+		OutputStringGL(x,y,m2.c_str(),0xffffffff,0,surfaceBuffer);
+#endif
 		y += 20;
 	}
 
@@ -2097,12 +2421,36 @@ static void show_warning(char const * const message) {
 	SDL_BlitSurface(splash_surf, NULL, sdl.surface, NULL);
 	SDL_Flip(sdl.surface);
 #else
-	SDL_Texture *splashTex = SDL_CreateTextureFromSurface(sdl.renderer, splash_surf);
-	SDL_SetRenderDrawColor(sdl.renderer, 0, 0, 0, 255);
-	SDL_SetTextureAlphaMod(splashTex, 255);
-	SDL_RenderCopy(sdl.renderer, splashTex, NULL, NULL);
-	SDL_RenderPresent(sdl.renderer);
-	SDL_DestroyTexture(splashTex);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, gc_warningTexWidth, gc_warningTexHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, surfaceBuffer);
+	CheckGL;
+	free(surfaceBuffer);
+
+	sdl.glUseProgram(sdl.progSimple);
+	CheckGL;
+
+	sdl.glUniform1f(sdl.simpleFadeFactorAddr, 1.0);
+	CheckGL;
+	sdl.glUniform1i(sdl.simpleTexUnitAddr, 0);
+	CheckGL;
+
+	sdl.glBindBuffer(GL_ARRAY_BUFFER, sdl.vertBuffer);
+	CheckGL;
+	sdl.glVertexAttribPointer(sdl.simplePositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
+	CheckGL;
+	sdl.glEnableVertexAttribArray(sdl.simplePositionAddr);
+	CheckGL;
+
+	sdl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sdl.idxBuffer);
+	CheckGL;
+
+	sdl.glEnableVertexAttribArray(sdl.simplePositionAddr);
+	CheckGL;
+	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
+	CheckGL;
+	sdl.glDisableVertexAttribArray(sdl.simplePositionAddr);
+	CheckGL;
+	SDL_GL_SwapWindow(sdl.window);
 #endif
 
 	SDL_Delay(12000);
