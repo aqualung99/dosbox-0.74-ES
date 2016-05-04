@@ -23,9 +23,11 @@
 // 1: complex scalers off, scaler cache off, all simple scalers on
 // 2: complex scalers off, scaler cache on
 // 3: complex scalers on
-#define RENDER_USE_ADVANCED_SCALERS 3
+#define RENDER_USE_ADVANCED_SCALERS 0
 
+#ifndef JOEL_REMOVED
 #include "../src/gui/render_scalers.h"
+#endif
 
 #define RENDER_SKIP_CACHE	16
 //Enable this for scalers to support 0 input for empty lines
@@ -38,12 +40,14 @@ typedef struct {
 		Bit8u blue;
 		Bit8u unused;
 	} rgb[256];
+#ifndef JOEL_REMOVED
 	union {
 		Bit16u b16[256];
 		Bit32u b32[256];
 	} lut;
 	bool changed;
 	Bit8u modified[256];
+#endif
 	Bitu first;
 	Bitu last;
 } RenderPal_t;
@@ -57,6 +61,7 @@ typedef struct {
 		double ratio;
 		float fps;
 	} src;
+#ifndef JOEL_REMOVED
 	struct {
 		Bitu count;
 		Bitu max;
@@ -80,12 +85,17 @@ typedef struct {
 		Bit8u *cacheRead;
 		Bitu inHeight, inLine, outLine;
 	} scale;
+#endif
 	RenderPal_t pal;
 	bool updating;
 	bool active;
 	bool aspect;
 	bool fullFrame;
 } Render_t;
+
+#ifdef JOEL_REMOVED
+typedef void (*ScalerLineHandler_t)(const void *src);
+#endif
 
 extern Render_t render;
 extern ScalerLineHandler_t RENDER_DrawLine;

@@ -69,6 +69,11 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch);
 void GFX_EndUpdate( const Bit16u *changedLines );
 void GFX_GetSize(int &width, int &height, bool &fullscreen);
 void GFX_LosingFocus(void);
+#ifdef JOEL_REMOVED
+void GFX_LineHandler8(const void *s);
+void GFX_LineHandler16(const void *s);
+void GFX_LineHandler32(const void *s);
+#endif
 
 #if defined (WIN32)
 bool GFX_SDLUsingWinDIB(void);
