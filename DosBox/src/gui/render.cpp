@@ -466,9 +466,7 @@ forcenormal:
 		else 
 			goto forcenormal;
 	}
-#endif
 	width *= xscale;
-#ifndef JOEL_REMOVED
 	Bitu skip = complexBlock ? 1 : 0;
 	if (gfx_flags & GFX_SCALING) {
 		height = MakeAspectTable(skip, render.src.height, yscale, yscale );

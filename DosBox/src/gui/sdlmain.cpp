@@ -174,6 +174,8 @@ struct SDL_Block {
 		GLuint displaylist;
 #endif
 		GLint max_texsize;
+		GLint pow2TexHeight;
+		GLint pow2TexWidth;
 		bool bilinear;
 		bool packed_pixel;
 		bool paletted_texture;
@@ -217,6 +219,8 @@ struct SDL_Block {
 	PFNGLGETATTRIBLOCATIONPROC glGetAttribLocation;
 	PFNGLUSEPROGRAMPROC glUseProgram;
 	PFNGLUNIFORM1FPROC glUniform1f;
+	PFNGLUNIFORM2FPROC glUniform2f;
+	PFNGLUNIFORM4FPROC glUniform4f;
 	PFNGLUNIFORM1IPROC glUniform1i;
 	PFNGLVERTEXATTRIBPOINTERPROC glVertexAttribPointer;
 	PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray;
@@ -243,6 +247,10 @@ struct SDL_Block {
 	GLint palTexUnitAddr;
 	GLint palPalUnitAddr;
 	GLint palPositionAddr;
+	GLint palSourceSizeAddr;
+	GLint palOneAddr;
+	GLint palTargetSizeAddr;
+	GLint palUvRatioAddr;
 
 	GLuint texPalette;
 
@@ -398,7 +406,23 @@ check_gotbpp:
 		flags|=GFX_SCALING;
 		flags&=~(GFX_CAN_8|GFX_CAN_15|GFX_CAN_16);
 #else
-		flags = GFX_CAN_8|GFX_CAN_15|GFX_CAN_16|GFX_CAN_32|GFX_CAN_RANDOM;
+		if (flags & GFX_CAN_8)
+		{
+			flags |= GFX_LOVE_8;
+		}
+		if (flags & GFX_CAN_15)
+		{
+			flags |= GFX_CAN_15;
+		}
+		if (flags & GFX_CAN_16)
+		{
+			flags |= GFX_CAN_16;
+		}
+		if (flags & GFX_CAN_32)
+		{
+			flags |= GFX_CAN_32;
+		}
+		flags |= GFX_CAN_RANDOM;
 #endif
 		break;
 #endif
@@ -464,10 +488,15 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 #ifndef JOEL_REMOVED
 			sdl.surface = SDL_SetVideoMode(fixedWidth,fixedHeight,bpp,sdl_flags);
 #else
+		{
 			sdl.window = SDL_CreateWindow("DOSBox", 
 										  SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 
 										  fixedWidth, fixedHeight, 
-										  sdl_flags | SDL_WINDOW_FULLSCREEN);
+										  sdl_flags | SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL);
+			SDL_SetWindowFullscreen(sdl.window, SDL_WINDOW_FULLSCREEN);
+			sdl.clip.w = fixedWidth;
+			sdl.clip.h = fixedHeight;
+		}
 #endif
 		else
 #ifndef JOEL_REMOVED
@@ -479,21 +508,21 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 											  SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 
 											  fixedWidth, fixedHeight, 
 											  sdl_flags);
+				sdl.clip.w = fixedWidth;
+				sdl.clip.h = fixedHeight;
 			}
 			else
 			{
 				SDL_SetWindowSize(sdl.window, fixedWidth, fixedHeight);
-				SDL_SetWindowFullscreen(sdl.window, SDL_WINDOW_FULLSCREEN);
+				SDL_SetWindowFullscreen(sdl.window, 0);
+				sdl.clip.w = fixedWidth;
+				sdl.clip.h = fixedHeight;
 			}
 #endif
 
 #ifdef JOEL_REMOVED
 		if (sdl.window)
 		{
-			//if (sdl.renderer == NULL)
-			//{
-			//	sdl.renderer = SDL_CreateRenderer(sdl.window, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
-			//}
 			if (sdl.context == NULL)
 			{
 				sdl.context = SDL_GL_CreateContext(sdl.window);
@@ -532,7 +561,7 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 #else
 		if (sdl.window == NULL)
 		{
-			sdl.window = SDL_CreateWindow("DOSBox", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, sdl.clip.w, sdl.clip.h, SDL_WINDOW_OPENGL);
+			sdl.window = SDL_CreateWindow("DOSBox", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, sdl.clip.w, sdl.clip.h, SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL);
 		}
 		else
 		{
@@ -704,6 +733,8 @@ dosurface:
 		sdl.opengl.framebuf=0;
 		if (!(flags&GFX_CAN_32) || (flags & GFX_RGBONLY)) goto dosurface;
 		int texsize=2 << int_log2(width > height ? width : height);
+		sdl.opengl.pow2TexWidth = 2 << int_log2(width + 2);		// One texel border on each side
+		sdl.opengl.pow2TexHeight = 2 << int_log2(height + 2);	// One texel border on each side
 		if (texsize>sdl.opengl.max_texsize) {
 			LOG_MSG("SDL:OPENGL:No support for texturesize of %d, falling back to surface",texsize);
 			goto dosurface;
@@ -732,10 +763,10 @@ dosurface:
 #endif
 		/* Create the texture and display list */
 		{
-			sdl.opengl.framebuf=malloc(width*height*4);		//32 bit color
+//			sdl.opengl.framebuf=malloc(width*height*4);		//32 bit color
 		}
-		sdl.opengl.pitch=width*4;
-		glViewport(sdl.clip.x,sdl.clip.y,sdl.clip.w,sdl.clip.h);
+//		sdl.opengl.pitch=width*4;
+		glViewport(0, 0, sdl.clip.w, sdl.clip.h);
 		CheckGL;
 		glDeleteTextures(1,&sdl.opengl.texture);
 		CheckGL;
@@ -745,7 +776,35 @@ dosurface:
 		CheckGL;
 		glBindTexture(GL_TEXTURE_2D,sdl.opengl.texture);
 		CheckGL;
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, sdl.clip.w, sdl.clip.h, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, NULL);
+
+		if (flags & GFX_LOVE_8)
+		{
+			sdl.draw.bpp = bpp = 8;
+		}
+		else if (flags & GFX_LOVE_15)
+		{
+			sdl.draw.bpp = bpp = 15;
+		}
+		else if (flags & GFX_LOVE_16)
+		{
+			sdl.draw.bpp = bpp = 16;
+		}
+		else if (flags & GFX_LOVE_32)
+		{
+			sdl.draw.bpp = bpp = 32;
+		}
+
+		if (bpp == 8)
+		{
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, sdl.opengl.pow2TexWidth, sdl.opengl.pow2TexHeight, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, NULL);
+			CheckGL;
+			// Write a blank line at the top
+			// This alloc is usually 1K
+			//
+			GLubyte *tmpBuf = (GLubyte*)calloc(sdl.opengl.pow2TexWidth, sizeof(GLubyte));
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, sdl.opengl.pow2TexHeight - 1, sdl.opengl.pow2TexWidth, 1, GL_LUMINANCE, GL_UNSIGNED_BYTE, tmpBuf);
+			free(tmpBuf);
+		}
 		CheckGL;
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 		CheckGL;
@@ -755,6 +814,15 @@ dosurface:
 		CheckGL;
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		CheckGL;
+		sdl.glUseProgram(sdl.progPalette);
+		CheckGL;
+		sdl.glUniform2f(sdl.palOneAddr, 1.0f / (width + 2), 1.0f / (height + 2));
+		CheckGL;
+		sdl.glUniform4f(sdl.palSourceSizeAddr, (GLfloat)width + 2, (GLfloat)height + 2, 0.0f, 0.0f);
+		CheckGL;
+		sdl.glUniform2f(sdl.palUvRatioAddr, (GLfloat)(width + 2) / sdl.opengl.pow2TexWidth, (GLfloat)(height + 2) / sdl.opengl.pow2TexHeight);
+		CheckGL;
+
 #ifndef JOEL_REMOVED
 		glMatrixMode (GL_PROJECTION);
 		// No borders
@@ -905,7 +973,7 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 		//pitch=sdl.opengl.pitch;
 		pixels = 0;
 		pitch = 0;
-		sdl.nextRenderLineNum = 0;
+		sdl.nextRenderLineNum = sdl.opengl.pow2TexHeight - 2;
 		sdl.updating=true;
 		sdl.glActiveTexture(GL_TEXTURE0);
 		CheckGL;
@@ -919,23 +987,41 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 	return false;
 }
 
-static unsigned char g_testLineBuf[720 * 480];
-
 void GFX_LineHandler8(const void * src)
 {
-	memcpy(g_testLineBuf + (sdl.nextRenderLineNum * 720), src, sdl.draw.width);
-
 	sdl.glActiveTexture(GL_TEXTURE0);
 	CheckGL;
     glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
 	CheckGL;
 
+	GLubyte tmpBuf = 0;
+
+	// Write a left-side border texel with color 0
+	//
 	glTexSubImage2D(GL_TEXTURE_2D, 
 					0,
-					0, sdl.nextRenderLineNum++,
+					0, sdl.nextRenderLineNum,
+					1, 1,
+					GL_LUMINANCE, GL_UNSIGNED_BYTE,
+					&tmpBuf);
+
+	// Then write VGA line
+	//
+	glTexSubImage2D(GL_TEXTURE_2D, 
+					0,
+					1, sdl.nextRenderLineNum,
 					sdl.draw.width, 1,
 					GL_LUMINANCE, GL_UNSIGNED_BYTE,
 					src);
+
+	// Write a right-side border texel with color 0
+	//
+	glTexSubImage2D(GL_TEXTURE_2D, 
+					0,
+					sdl.draw.width + 1, sdl.nextRenderLineNum--,
+					1, 1,
+					GL_LUMINANCE, GL_UNSIGNED_BYTE,
+					&tmpBuf);
 
 }
 
@@ -1054,6 +1140,15 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 			CheckGL;
             glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
 			CheckGL;
+
+			// Draw the final border line of 0's across the bottom
+			//
+			if (sdl.draw.bpp == 8)
+			{
+				GLubyte *tmpBuf = (GLubyte*)calloc(sdl.opengl.pow2TexWidth, sizeof(GLubyte));
+				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, sdl.opengl.pow2TexHeight - (sdl.draw.height + 1), sdl.draw.width, 1, GL_LUMINANCE, GL_UNSIGNED_BYTE, tmpBuf);
+				free(tmpBuf);
+			}
 			sdl.glActiveTexture(GL_TEXTURE1);
 			CheckGL;
 			glBindTexture(GL_TEXTURE_2D, sdl.texPalette);
@@ -1287,6 +1382,28 @@ static void OutputStringGL(Bitu x,Bitu y,const char * text,Bit32u color,Bit32u c
 		draw+=8;
 	}
 }
+
+static void GFX_AwaitKeypress(void)
+{
+	bool bKeyFound = false;
+
+	LOG_MSG("Press any key to quit...");
+	do
+	{
+		const Uint8 *state = SDL_GetKeyboardState(NULL);
+
+		for (int i = 0; i < SDL_NUM_SCANCODES; i++)
+		{
+			if (state[i])
+			{
+				bKeyFound = true;
+				break;
+			}
+		}
+
+	} while (bKeyFound == false);
+}
+
 #endif
 
 static GLuint CreateObjectBuffer(GLenum target, const void *buffer_data, GLsizei buffer_size) 
@@ -1332,7 +1449,7 @@ static GLuint CreateProgram(GLuint vertexShader, GLuint fragmentShader)
 		LOG_MSG("Results of linking: %s", szLogBuffer);
 		free(szLogBuffer);
 	}
-	else
+	if (linkResult == GL_TRUE)
 	{
 		GLint numActiveAttribs = 0;
 		GLint numActiveUniforms = 0;
@@ -1378,6 +1495,10 @@ static GLuint CreateProgram(GLuint vertexShader, GLuint fragmentShader)
 		LOG_MSG("%s", progSummary);
 		free(progSummary);
 	}
+	else
+	{
+		GFX_AwaitKeypress();
+	}
 
 	if (linkResult == GL_TRUE)
 	{
@@ -1400,6 +1521,8 @@ static GLuint LoadShader(const char *szShaderFile, GLenum shaderType)
 	FILE *fp = fopen(szBuffer, "rt");
 	if (!fp)
 	{
+		LOG_MSG("Could not open file \"%s\"", szShaderFile);
+		GFX_AwaitKeypress();
 		return 0;
 	}
 
@@ -1450,9 +1573,9 @@ static GLuint LoadShader(const char *szShaderFile, GLenum shaderType)
 		LOG_MSG("Results of compiling \"%s\": %s", szShaderFile, szLogBuffer);
 		free(szLogBuffer);
 	}
-	else
+	if (compileResult != GL_TRUE)
 	{
-		LOG_MSG("Results of compiling \"%s\": %s", szShaderFile, compileResult == GL_TRUE ? "GL_TRUE" : "GL_FALSE");
+		GFX_AwaitKeypress();
 	}
 
 	for (int i = 0; i < codeLine; i++)
@@ -1691,6 +1814,8 @@ static void GUI_StartUp(Section * sec) {
 	sdl.glGetAttribLocation = (PFNGLGETATTRIBLOCATIONPROC)SDL_GL_GetProcAddress("glGetAttribLocation");
 	sdl.glUseProgram = (PFNGLUSEPROGRAMPROC)SDL_GL_GetProcAddress("glUseProgram");
 	sdl.glUniform1f = (PFNGLUNIFORM1FPROC)SDL_GL_GetProcAddress("glUniform1f");
+	sdl.glUniform2f = (PFNGLUNIFORM2FPROC)SDL_GL_GetProcAddress("glUniform2f");
+	sdl.glUniform4f = (PFNGLUNIFORM4FPROC)SDL_GL_GetProcAddress("glUniform4f");
 	sdl.glUniform1i = (PFNGLUNIFORM1IPROC)SDL_GL_GetProcAddress("glUniform1i");
 	sdl.glVertexAttribPointer = (PFNGLVERTEXATTRIBPOINTERPROC)SDL_GL_GetProcAddress("glVertexAttribPointer");
 	sdl.glEnableVertexAttribArray = (PFNGLENABLEVERTEXATTRIBARRAYPROC)SDL_GL_GetProcAddress("glEnableVertexAttribArray");
@@ -1710,7 +1835,7 @@ static void GUI_StartUp(Section * sec) {
 
 	// Vertex shader is the same
 	sdl.vsPalette = LoadShader("pal.vs", GL_VERTEX_SHADER);
-	sdl.psPalette = LoadShader("pal.ps", GL_FRAGMENT_SHADER);
+	sdl.psPalette = LoadShader("pal2.ps", GL_FRAGMENT_SHADER);
 	sdl.progPalette = CreateProgram(sdl.vsPalette, sdl.psPalette);
 
 	glGenTextures(1, &sdl.texPalette);
@@ -1775,9 +1900,9 @@ static void GUI_StartUp(Section * sec) {
 		glBindTexture(GL_TEXTURE_2D, splashTex);
 		CheckGL;
 
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		CheckGL;
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		CheckGL;
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
 		CheckGL;
@@ -1819,7 +1944,17 @@ static void GUI_StartUp(Section * sec) {
 		CheckGL;
 		sdl.palPositionAddr = sdl.glGetAttribLocation(sdl.progPalette, "position");
 		CheckGL;
+		sdl.palSourceSizeAddr = sdl.glGetUniformLocation(sdl.progPalette, "sourceSize");
+		CheckGL;
+		sdl.palOneAddr = sdl.glGetUniformLocation(sdl.progPalette, "one");
+		CheckGL;
+		//sdl.palTargetSizeAddr = sdl.glGetUniformLocation(sdl.progPalette, "targetSize");
+		//CheckGL;
+		sdl.palUvRatioAddr = sdl.glGetUniformLocation(sdl.progPalette, "uvRatio");
+		CheckGL;
 
+		// Now get ready to draw the logo
+		//
 		sdl.glUseProgram(sdl.progSimple);
 		CheckGL;
 
@@ -1843,7 +1978,7 @@ static void GUI_StartUp(Section * sec) {
 
 		bool exit_splash = false;
 		float curFadeFactor = 1.0f;
-		static Bitu max_splash_loop = 3000;
+		static Bitu max_splash_loop = 1001;
 		static Bitu splash_fade = 1000;
 		static bool use_fadeout = true;
 
