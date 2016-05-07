@@ -362,36 +362,6 @@ typedef char assert_right_size [MAX_SCANCODES == (sizeof(sdlkey_map)/sizeof(sdlk
 
 #else // !MACOSX
 
-#ifndef JOEL_REMOVED
-#define MAX_SCANCODES 212
-static SDLKey sdlkey_map[MAX_SCANCODES]={SDLK_UNKNOWN,SDLK_ESCAPE,
-	SDLK_1,SDLK_2,SDLK_3,SDLK_4,SDLK_5,SDLK_6,SDLK_7,SDLK_8,SDLK_9,SDLK_0,
-	/* 0x0c: */
-	SDLK_MINUS,SDLK_EQUALS,SDLK_BACKSPACE,SDLK_TAB,
-	SDLK_q,SDLK_w,SDLK_e,SDLK_r,SDLK_t,SDLK_y,SDLK_u,SDLK_i,SDLK_o,SDLK_p,
-	SDLK_LEFTBRACKET,SDLK_RIGHTBRACKET,SDLK_RETURN,SDLK_LCTRL,
-	SDLK_a,SDLK_s,SDLK_d,SDLK_f,SDLK_g,SDLK_h,SDLK_j,SDLK_k,SDLK_l,
-	SDLK_SEMICOLON,SDLK_QUOTE,SDLK_BACKQUOTE,SDLK_LSHIFT,SDLK_BACKSLASH,
-	SDLK_z,SDLK_x,SDLK_c,SDLK_v,SDLK_b,SDLK_n,SDLK_m,
-	/* 0x33: */
-	SDLK_COMMA,SDLK_PERIOD,SDLK_SLASH,SDLK_RSHIFT,SDLK_KP_MULTIPLY,
-	SDLK_LALT,SDLK_SPACE,SDLK_CAPSLOCK,
-	SDLK_F1,SDLK_F2,SDLK_F3,SDLK_F4,SDLK_F5,SDLK_F6,SDLK_F7,SDLK_F8,SDLK_F9,SDLK_F10,
-	/* 0x45: */
-	SDLK_NUMLOCK,SDLK_SCROLLOCK,
-	SDLK_KP7,SDLK_KP8,SDLK_KP9,SDLK_KP_MINUS,SDLK_KP4,SDLK_KP5,SDLK_KP6,SDLK_KP_PLUS,
-	SDLK_KP1,SDLK_KP2,SDLK_KP3,SDLK_KP0,SDLK_KP_PERIOD,
-	SDLK_UNKNOWN,SDLK_UNKNOWN,
-	SDLK_LESS,SDLK_F11,SDLK_F12,
-	Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,
-	Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,
-	Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,
-	/* 0xb7: */
-	Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z
-	/* 0xd4: ... */
-};
-
-#else
 #undef Z
 #define Z SDL_SCANCODE_UNKNOWN
 
@@ -442,18 +412,8 @@ typedef char assert_right_size [SDL_NUM_SCANCODES == (sizeof(sdlkey_map)/sizeof(
 
 #endif
 
-#endif
-
 #undef Z
 
-#ifndef JOEL_REMOVED
-SDLKey MapSDLCode(Bitu skey) {
-	if (usescancodes) {
-		if (skey<MAX_SCANCODES) return sdlkey_map[skey];
-		else return SDLK_UNKNOWN;
-	} else return (SDLKey)skey;
-}
-#else
 SDL_Keycode MapSDLCode(Bitu skey) {
 	if (usescancodes) {
 		if (skey<SDL_NUM_SCANCODES) 
@@ -464,13 +424,8 @@ SDL_Keycode MapSDLCode(Bitu skey) {
 	else 
 		return (SDL_Keycode)skey;
 }
-#endif	// JOEL_REMOVED
 
-#ifndef JOEL_REMOVED
-Bitu GetKeyCode(SDL_keysym keysym) {
-#else
 Bitu GetKeyCode(SDL_Keysym keysym) {
-#endif
 	if (usescancodes) {
 		Bitu key=(Bitu)keysym.scancode;
 		if (key==0
@@ -514,12 +469,8 @@ Bitu GetKeyCode(SDL_Keysym keysym) {
 	} else {
 #if defined (WIN32)
 		/* special handling of 102-key under windows */
-#ifndef JOEL_REMOVED
-		if ((keysym.sym==SDLK_BACKSLASH) && (keysym.scancode==0x56)) return (Bitu)SDLK_LESS;
-#else
 		if ((keysym.sym==SDLK_BACKSLASH) && (keysym.scancode==0x56)) return (Bitu)SDL_SCANCODE_KP_LESS;
 		return (Bitu)keysym.scancode;
-#endif
 #endif
 		return (Bitu)keysym.sym;
 	}
@@ -531,11 +482,7 @@ class CKeyBindGroup;
 
 class CKeyBind : public CBind {
 public:
-#ifndef JOEL_REMOVED
-	CKeyBind(CBindList * _list,SDLKey _key) : CBind(_list) {
-#else
 	CKeyBind(CBindList * _list,SDL_Keycode _key) : CBind(_list) {
-#endif
 		key = _key;
 	}
 	void BindName(char * buf) {
@@ -545,11 +492,7 @@ public:
 		sprintf(buf,"key %d",MapSDLCode((Bitu)key));
 	}
 public:
-#ifndef JOEL_REMOVED
-	SDLKey key;
-#else
 	SDL_Keycode key;
-#endif
 };
 
 class CKeyBindGroup : public  CBindGroup {
@@ -569,39 +512,23 @@ public:
 			if (code<MAX_SDLKEYS) code=scancode_map[code];
 			else code=0;
 		}
-#ifndef JOEL_REMOVED
-		CBind * bind=CreateKeyBind((SDLKey)code);
-#else
 		CBind * bind=CreateKeyBind((SDL_Keycode)code);
-#endif
 		return bind;
 	}
 	CBind * CreateEventBind(SDL_Event * event) {
 		if (event->type!=SDL_KEYDOWN) return 0;
-#ifndef JOEL_REMOVED
-		return CreateKeyBind((SDLKey)GetKeyCode(event->key.keysym));
-#else
 		return CreateKeyBind((SDL_Keycode)GetKeyCode(event->key.keysym));
-#endif
 	};
 	bool CheckEvent(SDL_Event * event) {
 		if (event->type!=SDL_KEYDOWN && event->type!=SDL_KEYUP) return false;
 		Bitu key=GetKeyCode(event->key.keysym);
 //		LOG_MSG("key type %i is %x [%x %x]",event->type,key,event->key.keysym.sym,event->key.keysym.scancode);
-#ifndef JOEL_REMOVED
-		assert(Bitu(event->key.keysym.sym)<keys);
-#else
 		assert(Bitu(key)<keys);
-#endif
 		if (event->type==SDL_KEYDOWN) ActivateBindList(&lists[key],0x7fff,true);
 		else DeactivateBindList(&lists[key],true);
 		return 0;
 	}
-#ifndef JOEL_REMOVED
-	CBind * CreateKeyBind(SDLKey _key) {
-#else
 	CBind * CreateKeyBind(SDL_Keycode _key) {
-#endif
 		if (!usescancodes) assert((Bitu)_key<keys);
 		return new CKeyBind(&lists[(Bitu)_key],_key);
 	}
@@ -754,11 +681,7 @@ public:
 		if (axes_cap>axes) axes_cap=axes;
 		hats_cap=emulated_hats;
 		if (hats_cap>hats) hats_cap=hats;
-#ifndef JOEL_REMOVED
-		LOG_MSG("Using joystick %s with %d axes, %d buttons and %d hat(s)",SDL_JoystickName(stick),axes,buttons,hats);
-#else
 		LOG_MSG("Using joystick %s with %d axes, %d buttons and %d hat(s)",SDL_JoystickName(sdl_joystick),axes,buttons,hats);
-#endif
 
 	}
 	~CStickBindGroup() {
@@ -965,11 +888,7 @@ private:
 		return configname;
 	}
 	const char * BindStart(void) {
-#ifndef JOEL_REMOVED
-		if (sdl_joystick!=NULL) return SDL_JoystickName(stick);
-#else
 		if (sdl_joystick!=NULL) return SDL_JoystickName(sdl_joystick);
-#endif
 		else return "[missing joystick]";
 	}
 
@@ -1330,11 +1249,9 @@ protected:
 static struct CMapper {
 	SDL_Surface * surface;
 	SDL_Surface * draw_surface;
-#ifdef JOEL_REMOVED
 	SDL_Renderer * renderer;
 	SDL_Window * window;
 	SDL_Palette * map_pal;
-#endif
 	bool exit;
 	CEvent * aevent;				//Active Event
 	CBind * abind;					//Active Bind
@@ -1679,46 +1596,22 @@ public:
 		case MK_f1:case MK_f2:case MK_f3:case MK_f4:
 		case MK_f5:case MK_f6:case MK_f7:case MK_f8:
 		case MK_f9:case MK_f10:case MK_f11:case MK_f12:	
-#ifndef JOEL_REMOVED
-			key=SDLK_F1+(defkey-MK_f1);
-#else
 			key = SDL_SCANCODE_F1+(defkey-MK_f1);
-#endif
 			break;
 		case MK_return:
-#ifndef JOEL_REMOVED
-			key=SDLK_RETURN;
-#else
 			key = SDL_SCANCODE_RETURN;
-#endif
 			break;
 		case MK_kpminus:
-#ifndef JOEL_REMOVED
-			key=SDLK_KP_MINUS;
-#else
 			key = SDL_SCANCODE_KP_MINUS;
-#endif
 			break;
 		case MK_scrolllock:
-#ifndef JOEL_REMOVED
-			key=SDLK_SCROLLOCK;
-#else
 			key = SDL_SCANCODE_SCROLLLOCK;
-#endif
 			break;
 		case MK_pause:
-#ifndef JOEL_REMOVED
-			key=SDLK_PAUSE;
-#else
 			key = SDL_SCANCODE_PAUSE;
-#endif
 			break;
 		case MK_printscreen:
-#ifndef JOEL_REMOVED
-			key=SDLK_PRINT;
-#else
 			key = SDL_SCANCODE_PRINTSCREEN;
-#endif
 			break;
 		}
 		sprintf(buf,"%s \"key %d%s%s%s\"",
@@ -1807,13 +1700,9 @@ static void DrawButtons(void) {
 		(*but_it)->Draw();
 	}
 	SDL_UnlockSurface(mapper.surface);
-#ifndef JOEL_REMOVED
-	SDL_Flip(mapper.surface);
-#else
 	SDL_Texture *pTex = SDL_CreateTextureFromSurface(mapper.renderer, mapper.surface);
 	SDL_RenderCopy(mapper.renderer, pTex, NULL, NULL);
 	SDL_RenderPresent(mapper.renderer);
-#endif
 }
 
 static CKeyEvent * AddKeyButtonEvent(Bitu x,Bitu y,Bitu dx,Bitu dy,char const * const title,char const * const entry,KBD_KEYS key) {
@@ -2152,43 +2041,6 @@ static struct {
 	const char * eventend;
 	Bitu key;
 } DefaultKeys[]={
-#ifndef JOEL_REMOVED
-	{"f1",SDLK_F1},		{"f2",SDLK_F2},		{"f3",SDLK_F3},		{"f4",SDLK_F4},
-	{"f5",SDLK_F5},		{"f6",SDLK_F6},		{"f7",SDLK_F7},		{"f8",SDLK_F8},
-	{"f9",SDLK_F9},		{"f10",SDLK_F10},	{"f11",SDLK_F11},	{"f12",SDLK_F12},
-
-	{"1",SDLK_1},		{"2",SDLK_2},		{"3",SDLK_3},		{"4",SDLK_4},
-	{"5",SDLK_5},		{"6",SDLK_6},		{"7",SDLK_7},		{"8",SDLK_8},
-	{"9",SDLK_9},		{"0",SDLK_0},
-
-	{"a",SDLK_a},		{"b",SDLK_b},		{"c",SDLK_c},		{"d",SDLK_d},
-	{"e",SDLK_e},		{"f",SDLK_f},		{"g",SDLK_g},		{"h",SDLK_h},
-	{"i",SDLK_i},		{"j",SDLK_j},		{"k",SDLK_k},		{"l",SDLK_l},
-	{"m",SDLK_m},		{"n",SDLK_n},		{"o",SDLK_o},		{"p",SDLK_p},
-	{"q",SDLK_q},		{"r",SDLK_r},		{"s",SDLK_s},		{"t",SDLK_t},
-	{"u",SDLK_u},		{"v",SDLK_v},		{"w",SDLK_w},		{"x",SDLK_x},
-	{"y",SDLK_y},		{"z",SDLK_z},		{"space",SDLK_SPACE},
-	{"esc",SDLK_ESCAPE},	{"equals",SDLK_EQUALS},		{"grave",SDLK_BACKQUOTE},
-	{"tab",SDLK_TAB},		{"enter",SDLK_RETURN},		{"bspace",SDLK_BACKSPACE},
-	{"lbracket",SDLK_LEFTBRACKET},						{"rbracket",SDLK_RIGHTBRACKET},
-	{"minus",SDLK_MINUS},	{"capslock",SDLK_CAPSLOCK},	{"semicolon",SDLK_SEMICOLON},
-	{"quote", SDLK_QUOTE},	{"backslash",SDLK_BACKSLASH},	{"lshift",SDLK_LSHIFT},
-	{"rshift",SDLK_RSHIFT},	{"lalt",SDLK_LALT},			{"ralt",SDLK_RALT},
-	{"lctrl",SDLK_LCTRL},	{"rctrl",SDLK_RCTRL},		{"comma",SDLK_COMMA},
-	{"period",SDLK_PERIOD},	{"slash",SDLK_SLASH},		{"printscreen",SDLK_PRINT},
-	{"scrolllock",SDLK_SCROLLOCK},	{"pause",SDLK_PAUSE},		{"pagedown",SDLK_PAGEDOWN},
-	{"pageup",SDLK_PAGEUP},	{"insert",SDLK_INSERT},		{"home",SDLK_HOME},
-	{"delete",SDLK_DELETE},	{"end",SDLK_END},			{"up",SDLK_UP},
-	{"left",SDLK_LEFT},		{"down",SDLK_DOWN},			{"right",SDLK_RIGHT},
-	{"kp_0",SDLK_KP0},	{"kp_1",SDLK_KP1},	{"kp_2",SDLK_KP2},	{"kp_3",SDLK_KP3},
-	{"kp_4",SDLK_KP4},	{"kp_5",SDLK_KP5},	{"kp_6",SDLK_KP6},	{"kp_7",SDLK_KP7},
-	{"kp_8",SDLK_KP8},	{"kp_9",SDLK_KP9},	{"numlock",SDLK_NUMLOCK},
-	{"kp_divide",SDLK_KP_DIVIDE},	{"kp_multiply",SDLK_KP_MULTIPLY},
-	{"kp_minus",SDLK_KP_MINUS},		{"kp_plus",SDLK_KP_PLUS},
-	{"kp_period",SDLK_KP_PERIOD},	{"kp_enter",SDLK_KP_ENTER},
-
-#else
-
 	{"f1",SDL_SCANCODE_F1},		{"f2",SDL_SCANCODE_F2},		{"f3",SDL_SCANCODE_F3},		{"f4",SDL_SCANCODE_F4},
 	{"f5",SDL_SCANCODE_F5},		{"f6",SDL_SCANCODE_F6},		{"f7",SDL_SCANCODE_F7},		{"f8",SDL_SCANCODE_F8},
 	{"f9",SDL_SCANCODE_F9},		{"f10",SDL_SCANCODE_F10},	{"f11",SDL_SCANCODE_F11},	{"f12",SDL_SCANCODE_F12},
@@ -2223,8 +2075,6 @@ static struct {
 	{"kp_minus",SDL_SCANCODE_KP_MINUS},		{"kp_plus",SDL_SCANCODE_KP_PLUS},
 	{"kp_period",SDL_SCANCODE_KP_PERIOD},	{"kp_enter",SDL_SCANCODE_KP_ENTER},
 
-#endif	// JOEL_REMOVED
-
 #if defined (MACOSX)
 	/* Intl Mac keyboards in US layout actually put U+00A7 SECTION SIGN here */
 	{"lessthan",SDLK_WORLD_0},
@@ -2244,17 +2094,10 @@ static void CreateDefaultBinds(void) {
 		CreateStringBind(buffer);
 		i++;
 	}
-#ifndef JOEL_REMOVED
-	sprintf(buffer,"mod_1 \"key %d\"",SDLK_RCTRL);CreateStringBind(buffer);
-	sprintf(buffer,"mod_1 \"key %d\"",SDLK_LCTRL);CreateStringBind(buffer);
-	sprintf(buffer,"mod_2 \"key %d\"",SDLK_RALT);CreateStringBind(buffer);
-	sprintf(buffer,"mod_2 \"key %d\"",SDLK_LALT);CreateStringBind(buffer);
-#else
 	sprintf(buffer,"mod_1 \"key %d\"",SDL_SCANCODE_RCTRL);CreateStringBind(buffer);
 	sprintf(buffer,"mod_1 \"key %d\"",SDL_SCANCODE_LCTRL);CreateStringBind(buffer);
 	sprintf(buffer,"mod_2 \"key %d\"",SDL_SCANCODE_RALT);CreateStringBind(buffer);
 	sprintf(buffer,"mod_2 \"key %d\"",SDL_SCANCODE_LALT);CreateStringBind(buffer);
-#endif
 	for (CHandlerEventVector_it hit=handlergroup.begin();hit!=handlergroup.end();hit++) {
 		(*hit)->MakeDefaultBind(buffer);
 		CreateStringBind(buffer);
@@ -2432,11 +2275,7 @@ static void InitializeJoysticks(void) {
 
 static void CreateBindGroups(void) {
 	bindgroups.clear();
-#ifndef JOEL_REMOVED
-	new CKeyBindGroup(SDLK_LAST);
-#else
 	new CKeyBindGroup(SDL_NUM_SCANCODES);
-#endif
 	if (joytype != JOY_NONE) {
 #if defined (REDUCE_JOYSTICK_POLLING)
 		// direct access to the SDL joystick, thus removed from the event handling
@@ -2513,22 +2352,14 @@ void MAPPER_RunInternal() {
 
 	/* Be sure that there is no update in progress */
 	GFX_EndUpdate( 0 );
-#ifndef JOEL_REMOVED
-	mapper.surface=SDL_SetVideoMode(640,480,8,0);
-#else
 	SDL_CreateWindowAndRenderer(640, 480, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN, &mapper.window, &mapper.renderer);
 	mapper.surface = SDL_CreateRGBSurface(0, 640, 480, 8, 0, 0, 0, 0);
 	mapper.map_pal = SDL_AllocPalette(5);
 	SDL_SetPaletteColors(mapper.map_pal, map_pal, 0, 5);
-#endif
 	if (mapper.surface == NULL) E_Exit("Could not initialize video mode for mapper: %s",SDL_GetError());
 
 	/* Set some palette entries */
-#ifndef JOEL_REMOVED
-	SDL_SetPalette(mapper.surface, SDL_LOGPAL|SDL_PHYSPAL, map_pal, 0, 5);
-#else
 	SDL_SetSurfacePalette(mapper.surface, mapper.map_pal);
-#endif
 	if (last_clicked) {
 		last_clicked->SetColor(CLR_WHITE);
 		last_clicked=NULL;
@@ -2600,11 +2431,7 @@ void MAPPER_StartUp(Section * sec) {
 	}
 
 	usescancodes = false;
-#ifndef JOEL_REMOVED
-	if (section->Get_bool("usescancodes")) {
-#else
 	if (0) {
-#endif
 		usescancodes=true;
 
 		/* Note: table has to be tested/updated for various OSs */
@@ -2700,25 +2527,15 @@ void MAPPER_StartUp(Section * sec) {
 		sdlkey_map[0x9c]=SDLK_KP_ENTER;
 		sdlkey_map[0x9d]=SDLK_RCTRL;
 		sdlkey_map[0xc5]=SDLK_PAUSE;
-#ifndef JOEL_REMOVED
-		sdlkey_map[0xb7]=SDLK_PRINT;
-#else
 		sdlkey_map[0xb7]=SDLK_PRINTSCREEN;
-#endif
 		sdlkey_map[0xb8]=SDLK_RALT;
 #endif
 
 		Bitu i;
 		for (i=0; i<MAX_SDLKEYS; i++) scancode_map[i]=0;
-#ifndef JOEL_REMOVED
-		for (i=0; i<MAX_SCANCODES; i++) {
-			SDLKey key=sdlkey_map[i];
-			if (key<MAX_SDLKEYS) scancode_map[key]=(Bit8u)i;
-#else
 		for (i=0; i<SDL_NUM_SCANCODES; i++) {
 			SDL_Keycode key=sdlkey_map[i];
 			if (key < SDL_NUM_SCANCODES) scancode_map[key]=(Bit8u)i;
-#endif
 		}
 	}
 
