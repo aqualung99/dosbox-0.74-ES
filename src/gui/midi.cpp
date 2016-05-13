@@ -98,6 +98,15 @@ MidiHandler Midi_none;
 
 #endif
 
+#if defined (C_MT32EMU)
+
+#define DOSBOX_MIDI_H
+#include "midi_mt32.cpp"
+static MidiHandler_mt32 &Midi_mt32 = MidiHandler_mt32::GetInstance();
+#undef DOSBOX_MIDI_H
+
+#endif // C_MT32EMU
+
 static struct {
 	Bitu status;
 	Bitu cmd_len;
@@ -118,10 +127,10 @@ void MIDI_RawOutByte(Bit8u data) {
 		midi.rt_buf[0]=data;
 		midi.handler->PlayMsg(midi.rt_buf);
 		return;
-	}	 
+	}
 	/* Test for a active sysex tranfer */
 	if (midi.status==0xf0) {
-		if (!(data&0x80)) { 
+		if (!(data&0x80)) {
 			if (midi.sysex.used<(SYSEX_SIZE-1)) midi.sysex.buf[midi.sysex.used++]=data;
 			return;
 		} else {
@@ -175,22 +184,22 @@ public:
 		while (handler) {
 			if (!strcasecmp(dev,handler->GetName())) {
 				if (!handler->Open(conf)) {
-					LOG_MSG("MIDI:Can't open device:%s with config:%s.",dev,conf);	
+					LOG_MSG("MIDI:Can't open device:%s with config:%s.",dev,conf);
 					goto getdefault;
 				}
 				midi.handler=handler;
-				midi.available=true;	
+				midi.available=true;
 				LOG_MSG("MIDI:Opened device:%s",handler->GetName());
 				return;
 			}
 			handler=handler->next;
 		}
-		LOG_MSG("MIDI:Can't find device:%s, finding default handler.",dev);	
-getdefault:	
+		LOG_MSG("MIDI:Can't find device:%s, finding default handler.",dev);
+getdefault:
 		handler=handler_list;
 		while (handler) {
 			if (handler->Open(conf)) {
-				midi.available=true;	
+				midi.available=true;
 				midi.handler=handler;
 				LOG_MSG("MIDI:Opened device:%s",handler->GetName());
 				return;

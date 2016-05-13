@@ -38,7 +38,7 @@ ScalerLineHandler_t RENDER_DrawLine;
 static void RENDER_CallBack( GFX_CallBackFunctions_t function );
 
 static void Check_Palette(void) {
-	if (render.pal.first>render.pal.last) 
+	if (render.pal.first>render.pal.last)
 		return;
 	GFX_SetPalette(render.pal.first,render.pal.last-render.pal.first+1,(GFX_PalEntry *)&render.pal.rgb[render.pal.first]);
 	/* Setup pal index to startup values */
@@ -87,17 +87,29 @@ static void RENDER_StartLineHandler(const void * s) {
 static void RENDER_FinishLineHandler(const void * s) {
 }
 
+static unsigned sg_StartUpdateCounter = 0;
+
 bool RENDER_StartUpdate(void) {
+    static int startCount = 0;
+
 	if (GCC_UNLIKELY(render.updating))
 		return false;
 	if (GCC_UNLIKELY(!render.active))
 		return false;
+
+//	sg_StartUpdateCounter++;
+//	if (sg_StartUpdateCounter & 0x01)
+//	{
+//        return false;
+//	}
+
 	if (render.src.bpp == 8)
 	{
 		Check_Palette();
 	}
+
 	RENDER_DrawLine = RENDER_StartLineHandler;
-	if (GCC_UNLIKELY(CaptureState & (CAPTURE_IMAGE|CAPTURE_VIDEO))) 
+	if (GCC_UNLIKELY(CaptureState & (CAPTURE_IMAGE|CAPTURE_VIDEO)))
 		render.fullFrame = true;
 	else
 		render.fullFrame = false;
@@ -181,12 +193,12 @@ static void RENDER_Reset( void ) {
 
 static void RENDER_CallBack( GFX_CallBackFunctions_t function ) {
 	if (function == GFX_CallBackStop) {
-		RENDER_Halt( );	
+		RENDER_Halt( );
 		return;
 	} else if (function == GFX_CallBackRedraw) {
 		return;
 	} else if ( function == GFX_CallBackReset) {
-		GFX_EndUpdate( 0 );	
+		GFX_EndUpdate( 0 );
 		RENDER_Reset();
 	} else {
 		E_Exit("Unhandled GFX_CallBackReset %d", function );
@@ -195,8 +207,8 @@ static void RENDER_CallBack( GFX_CallBackFunctions_t function ) {
 
 void RENDER_SetSize(Bitu width,Bitu height,Bitu bpp,float fps,double ratio,bool dblw,bool dblh) {
 	RENDER_Halt( );
-	if (!width || !height) { 
-		return;	
+	if (!width || !height) {
+		return;
 	}
 	if ( ratio > 1 ) {
 		double target = height * ratio + 0.1;

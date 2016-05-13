@@ -25,8 +25,8 @@ AC_ARG_ENABLE(sdltest, [  --disable-sdltest       Do not try to compile and run 
      fi
   fi
 
-  AC_PATH_PROG(SDL_CONFIG, sdl-config, no)
-  min_sdl_version=ifelse([$1], ,0.11.0,$1)
+  AC_PATH_PROG(SDL_CONFIG, sdl2-config, no)
+  min_sdl_version=ifelse([$1], ,2.0.0,$1)
   AC_MSG_CHECKING(for SDL - version >= $min_sdl_version)
   no_sdl=""
   if test "$SDL_CONFIG" = "no" ; then

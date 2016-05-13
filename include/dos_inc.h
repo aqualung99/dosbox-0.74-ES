@@ -27,6 +27,7 @@
 #ifndef DOSBOX_MEM_H
 #include "mem.h"
 #endif
+#include <stddef.h>
 
 #ifdef _MSC_VER
 #pragma pack (1)

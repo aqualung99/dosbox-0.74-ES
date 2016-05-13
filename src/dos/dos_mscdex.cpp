@@ -295,15 +295,9 @@ int CMscdex::AddDrive(Bit16u _drive, char* physicalPath, Bit8u& subUnit)
 		LOG(LOG_MISC,LOG_NORMAL)("MSCDEX: SDL Interface.");
 #endif
 #else	// JOEL_REMOVED
-#if defined (LINUX) || defined(OS2)
-		// Always use IOCTL in Linux or OS/2
-		cdrom[numDrives] = new CDROM_Interface_Ioctl();
-		LOG(LOG_MISC,LOG_NORMAL)("MSCDEX: IOCTL Interface.");
-#else
 		// Cannot comply; SDL has removed CD-ROM support!
 		//
 		return 6;
-#endif
 #endif	// JOEL_REMOVED
 		} break;
 	case 0x01:	// iso cdrom interface	
