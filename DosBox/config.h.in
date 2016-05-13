@@ -74,6 +74,9 @@
 /* Define to 1 to enable internal modem support, requires SDL_net */
 #undef C_MODEM
 
+/* Enable built-in MUNT MT-32 Emulator */
+#undef C_MT32EMU
+
 /* Define to 1 to use opengl display output support */
 #undef C_OPENGL
 

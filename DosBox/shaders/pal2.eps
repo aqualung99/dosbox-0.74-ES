@@ -1,8 +1,11 @@
-#version 120
+#version 100
+
+precision mediump float;
+precision lowp int;
 
 uniform sampler2D texUnit;
 uniform vec4 sourceSize;
-uniform sampler2D palUnit;
+uniform lowp sampler2D palUnit;
 uniform vec2 one;
 uniform vec2 uvRatio;
 
@@ -32,16 +35,18 @@ varying vec2 tcNorm;
 //
 //
 
-#define PAL(p)	 		texture2D(palUnit, vec2((p),0))
-#define CVT_U(u)		((u)*uvRatio.x)
-#define CVT_V(v)		((1.0 - uvRatio.y) + ((v) * uvRatio.y))
-#define	LOOKUP(c)		PAL(texture2D(texUnit, vec2(CVT_U((c).x), CVT_V((c).y))).x)
+#define PAL(p)	 			texture2D(palUnit, vec2((p),0))
+#define LOOKUP(c)			PAL(texture2D(texUnit, (c) * uvRatio).x)
 
 // By applying the CRT gamma here, we make it so the colors
 // we are working with are the values that a CRT would *apparently* have
 // on the screen. We are baking-in the wierd gamma response of the CRT monitor.
 //
+#ifdef USE_INPUT_GAMMA
 #define TEX2D(c) 		pow(LOOKUP(c), vec4(inputGamma))
+#else
+#define TEX2D(c)		LOOKUP((c))
+#endif
 
 
 // Apply radial distortion to the given coordinate.
@@ -136,9 +141,9 @@ void main() {
 	// Output pixels are alternately tinted green and magenta.
 	//
 	vec3 dotMaskWeights = mix(
-			vec3(1.1, 0.9, 1.1),
-			vec3(0.9, 1.1, 0.9),
-			floor(mod(gl_FragCoord.x, 2.0))
+			vec3(1.025, 0.975, 1.025),
+			vec3(0.975, 1.025, 0.975),
+			floor(mod(ratio_scale.x, 2.0))
 		);
 
 	mul_res *= dotMaskWeights;
@@ -149,5 +154,9 @@ void main() {
 	// emulate the old gamma response of CRT monitors; so apply the inverse of that
 	// response to get a final linear result.)
 	//
+#ifdef USE_OUTPUT_GAMMA
 	gl_FragColor = vec4(pow(mul_res, vec3(1.0 / outputGamma)), 1.0);
+#else
+	gl_FragColor = vec4(mul_res, 1.0);
+#endif
 }

@@ -84,7 +84,7 @@ void MPU401_Init(Section*);
 void PCSPEAKER_Init(Section*);
 void TANDYSOUND_Init(Section*);
 void DISNEY_Init(Section*);
-void SERIAL_Init(Section*); 
+void SERIAL_Init(Section*);
 
 
 #if C_IPX
@@ -125,28 +125,66 @@ Bit32s ticksDone;
 Bit32u ticksScheduled;
 bool ticksLocked;
 
+
+extern float CountMillisecs(timespec *pStart, timespec *pEnd);
+
 static Bitu Normal_Loop(void) {
 	Bits ret;
+	timespec picRunQueueClockCounter;
+	timespec cpuDecoderClockCounter;
+	timespec gfxEventsClockCounter;
+	timespec timerTickClockCounter;
+	timespec handlerClockCounter;
+    timespec tmpClockCounter;
+    float msPIC = 0, msCPU=0, msCallback=0, msGFX=0, msTick=0;
+
 	while (1) {
+
+		clock_gettime(CLOCK_MONOTONIC_RAW, &picRunQueueClockCounter);
+
 		if (PIC_RunQueue()) {
+
+            clock_gettime(CLOCK_MONOTONIC_RAW, &tmpClockCounter);
+            msPIC += CountMillisecs(&picRunQueueClockCounter, &tmpClockCounter);
+
 			ret=(*cpudecoder)();
+
+			clock_gettime(CLOCK_MONOTONIC_RAW, &cpuDecoderClockCounter);
+			msCPU += CountMillisecs(&tmpClockCounter, &cpuDecoderClockCounter);
+
 			if (GCC_UNLIKELY(ret<0)) return 1;
 			if (ret>0) {
 				Bitu blah=(*CallBack_Handlers[ret])();
+				clock_gettime(CLOCK_MONOTONIC_RAW, &handlerClockCounter);
+				msCallback += CountMillisecs(&cpuDecoderClockCounter, &handlerClockCounter);
+
 				if (GCC_UNLIKELY(blah)) return blah;
 			}
 #if C_DEBUG
 			if (DEBUG_ExitLoop()) return 0;
 #endif
 		} else {
+            clock_gettime(CLOCK_MONOTONIC_RAW, &tmpClockCounter);
+            msPIC += CountMillisecs(&picRunQueueClockCounter, &tmpClockCounter);
+
 			GFX_Events();
+
+			clock_gettime(CLOCK_MONOTONIC_RAW, &gfxEventsClockCounter);
+			msGFX += CountMillisecs(&tmpClockCounter, &gfxEventsClockCounter);
+
 			if (ticksRemain>0) {
 				TIMER_AddTick();
+
+				clock_gettime(CLOCK_MONOTONIC_RAW, &timerTickClockCounter);
+				msTick += CountMillisecs(&gfxEventsClockCounter, &timerTickClockCounter);
+
 				ticksRemain--;
 			} else goto increaseticks;
 		}
 	}
 increaseticks:
+//    LOG_MSG("PIC=%.1f  CPU=%.1f  CBack=%.1f GFX=%.1f Tick=%.1f", msPIC, msCPU, msCallback, msGFX, msTick);
+
 	if (GCC_UNLIKELY(ticksLocked)) {
 		ticksRemain=5;
 		/* Reset any auto cycle guessing for this frame */
@@ -181,12 +219,12 @@ increaseticks:
 							ratio = (Bit32s)((double)ratio * (1 - ratioremoved));
 							/* Don't allow very high ratio which can cause us to lock as we don't scale down
 							 * for very low ratios. High ratio might result because of timing resolution */
-							if (ticksScheduled >= 250 && ticksDone < 10 && ratio > 20480) 
+							if (ticksScheduled >= 250 && ticksDone < 10 && ratio > 20480)
 								ratio = 20480;
 							Bit64s cmax_scaled = (Bit64s)CPU_CycleMax * (Bit64s)ratio;
-							if (ratio <= 1024) 
+							if (ratio <= 1024)
 								new_cmax = (Bit32s)(cmax_scaled / (Bit64s)1024);
-							else 
+							else
 								new_cmax = (Bit32s)(1 + (CPU_CycleMax >> 1) + cmax_scaled / (Bit64s)2048);
 						}
 					}
@@ -284,7 +322,7 @@ static void DOSBOX_RealInit(Section * sec) {
 	}
 
 	std::string mtype(section->Get_string("machine"));
-	svgaCard = SVGA_None; 
+	svgaCard = SVGA_None;
 	machine = MCH_VGA;
 	int10.vesa_nolfb = false;
 	int10.vesa_oldvbe = false;
@@ -335,20 +373,20 @@ void DOSBOX_Init(void) {
 		"vgaonly", "svga_s3", "svga_et3000", "svga_et4000",
 		 "svga_paradise", "vesa_nolfb", "vesa_oldvbe", 0 };
 	secprop=control->AddSection_prop("dosbox",&DOSBOX_RealInit);
-	Pstring = secprop->Add_path("language",Property::Changeable::Always,"");
+	Pstring = secprop->Add_path("language",Property::Changeable::DBoxAlways,"");
 	Pstring->Set_help("Select another language file.");
 
 	Pstring = secprop->Add_string("machine",Property::Changeable::OnlyAtStart,"svga_s3");
 	Pstring->Set_values(machines);
 	Pstring->Set_help("The type of machine tries to emulate.");
 
-	Pstring = secprop->Add_path("captures",Property::Changeable::Always,"capture");
+	Pstring = secprop->Add_path("captures",Property::Changeable::DBoxAlways,"capture");
 	Pstring->Set_help("Directory where things like wave, midi, screenshot get captured.");
 
-#if C_DEBUG	
+#if C_DEBUG
 	LOG_StartUp();
 #endif
-	
+
 	secprop->AddInitFunction(&IO_Init);//done
 	secprop->AddInitFunction(&PAGING_Init);//done
 	secprop->AddInitFunction(&MEM_Init);//done
@@ -366,38 +404,6 @@ void DOSBOX_Init(void) {
 	secprop->AddInitFunction(&TIMER_Init);//done
 	secprop->AddInitFunction(&CMOS_Init);//done
 
-#ifndef JOEL_REMOVED
-	secprop=control->AddSection_prop("render",&RENDER_Init,true);
-	Pint = secprop->Add_int("frameskip",Property::Changeable::Always,0);
-	Pint->SetMinMax(0,10);
-	Pint->Set_help("How many frames DOSBox skips before drawing one.");
-
-	Pbool = secprop->Add_bool("aspect",Property::Changeable::Always,false);
-	Pbool->Set_help("Do aspect correction, if your output method doesn't support scaling this can slow things down!.");
-
-	Pmulti = secprop->Add_multi("scaler",Property::Changeable::Always," ");
-	Pmulti->SetValue("normal2x");
-	Pmulti->Set_help("Scaler used to enlarge/enhance low resolution modes.\n"
-	                 "  If 'forced' is appended, then the scaler will be used even if the result might not be desired.");
-	Pstring = Pmulti->GetSection()->Add_string("type",Property::Changeable::Always,"normal2x");
-
-	const char *scalers[] = { 
-		"none", "normal2x", "normal3x",
-#if RENDER_USE_ADVANCED_SCALERS>2
-		"advmame2x", "advmame3x", "advinterp2x", "advinterp3x", "hq2x", "hq3x", "2xsai", "super2xsai", "supereagle",
-#endif
-#if RENDER_USE_ADVANCED_SCALERS>0
-		"tv2x", "tv3x", "rgb2x", "rgb3x", "scan2x", "scan3x",
-#endif
-		0 };
-	Pstring->Set_values(scalers);
-
-	const char* force[] = { "", "forced", 0 };
-	Pstring = Pmulti->GetSection()->Add_string("force",Property::Changeable::Always,"");
-	Pstring->Set_values(force);
-
-#endif	// JOEL_REMOVED
-
 	secprop=control->AddSection_prop("cpu",&CPU_Init,true);//done
 	const char* cores[] = { "auto",
 #if (C_DYNAMIC_X86) || (C_DYNREC)
@@ -409,12 +415,12 @@ void DOSBOX_Init(void) {
 	Pstring->Set_help("CPU Core used in emulation. auto will switch to dynamic if available and appropriate.");
 
 	const char* cputype_values[] = { "auto", "386", "386_slow", "486_slow", "pentium_slow", "386_prefetch", 0};
-	Pstring = secprop->Add_string("cputype",Property::Changeable::Always,"auto");
+	Pstring = secprop->Add_string("cputype",Property::Changeable::DBoxAlways,"auto");
 	Pstring->Set_values(cputype_values);
 	Pstring->Set_help("CPU Type used in emulation. auto is the fastest choice.");
 
 
-	Pmulti_remain = secprop->Add_multiremain("cycles",Property::Changeable::Always," ");
+	Pmulti_remain = secprop->Add_multiremain("cycles",Property::Changeable::DBoxAlways," ");
 	Pmulti_remain->Set_help(
 		"Amount of instructions DOSBox tries to emulate each millisecond.\n"
 		"Setting this value too high results in sound dropouts and lags.\n"
@@ -426,20 +432,20 @@ void DOSBOX_Init(void) {
 		"  'max'           will allocate as much cycles as your computer is able to handle.\n");
 
 	const char* cyclest[] = { "auto","fixed","max","%u",0 };
-	Pstring = Pmulti_remain->GetSection()->Add_string("type",Property::Changeable::Always,"auto");
+	Pstring = Pmulti_remain->GetSection()->Add_string("type",Property::Changeable::DBoxAlways,"auto");
 	Pmulti_remain->SetValue("auto");
 	Pstring->Set_values(cyclest);
 
-	Pstring = Pmulti_remain->GetSection()->Add_string("parameters",Property::Changeable::Always,"");
-	
-	Pint = secprop->Add_int("cycleup",Property::Changeable::Always,10);
+	Pstring = Pmulti_remain->GetSection()->Add_string("parameters",Property::Changeable::DBoxAlways,"");
+
+	Pint = secprop->Add_int("cycleup",Property::Changeable::DBoxAlways,10);
 	Pint->SetMinMax(1,1000000);
 	Pint->Set_help("Amount of cycles to decrease/increase with keycombo.(CTRL-F11/CTRL-F12)");
 
-	Pint = secprop->Add_int("cycledown",Property::Changeable::Always,20);
+	Pint = secprop->Add_int("cycledown",Property::Changeable::DBoxAlways,20);
 	Pint->SetMinMax(1,1000000);
 	Pint->Set_help("Setting it lower than 100 will be a percentage.");
-		
+
 #if C_FPU
 	secprop->AddInitFunction(&FPU_Init);
 #endif
@@ -467,10 +473,10 @@ void DOSBOX_Init(void) {
 
 	secprop=control->AddSection_prop("midi",&MIDI_Init,true);//done
 	secprop->AddInitFunction(&MPU401_Init,true);//done
-	
+
 	const char* mputypes[] = { "intelligent", "uart", "none",0};
 	// FIXME: add some way to offer the actually available choices.
-	const char *devices[] = { "default", "win32", "alsa", "oss", "coreaudio", "coremidi","none", 0};
+	const char *devices[] = { "default", "win32", "alsa", "oss", "coreaudio", "coremidi", "mt32", "none", 0};
 	Pstring = secprop->Add_string("mpu401",Property::Changeable::WhenIdle,"intelligent");
 	Pstring->Set_values(mputypes);
 	Pstring->Set_help("Type of MPU-401 to emulate.");
@@ -483,12 +489,14 @@ void DOSBOX_Init(void) {
 	Pstring->Set_help("Special configuration options for the device driver. This is usually the id of the device you want to use.\n"
 	                  "  See the README/Manual for more details.");
 
+#include "mt32options.h"
+
 #if C_DEBUG
 	secprop=control->AddSection_prop("debug",&DEBUG_Init);
 #endif
 
 	secprop=control->AddSection_prop("sblaster",&SBLASTER_Init,true);//done
-	
+
 	const char* sbtypes[] = { "sb1", "sb2", "sbpro1", "sbpro2", "sb16", "gb", "none", 0 };
 	Pstring = secprop->Add_string("sbtype",Property::Changeable::WhenIdle,"sb16");
 	Pstring->Set_values(sbtypes);
@@ -529,7 +537,7 @@ void DOSBOX_Init(void) {
 
 
 	secprop=control->AddSection_prop("gus",&GUS_Init,true); //done
-	Pbool = secprop->Add_bool("gus",Property::Changeable::WhenIdle,false); 	
+	Pbool = secprop->Add_bool("gus",Property::Changeable::WhenIdle,false);
 	Pbool->Set_help("Enable the Gravis Ultrasound emulation.");
 
 	Pint = secprop->Add_int("gusrate",Property::Changeable::WhenIdle,44100);
@@ -568,13 +576,13 @@ void DOSBOX_Init(void) {
 	Pstring = secprop->Add_string("tandy",Property::Changeable::WhenIdle,"auto");
 	Pstring->Set_values(tandys);
 	Pstring->Set_help("Enable Tandy Sound System emulation. For 'auto', emulation is present only if machine is set to 'tandy'.");
-	
+
 	Pint = secprop->Add_int("tandyrate",Property::Changeable::WhenIdle,44100);
 	Pint->Set_values(rates);
 	Pint->Set_help("Sample rate of the Tandy 3-Voice generation.");
 
 	secprop->AddInitFunction(&DISNEY_Init,true);//done
-	
+
 	Pbool = secprop->Add_bool("disney",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("Enable Disney Sound Source emulation. (Covox Voice Master and Speech Thing compatible).");
 
@@ -600,7 +608,7 @@ void DOSBOX_Init(void) {
 
 	Pbool = secprop->Add_bool("autofire",Property::Changeable::WhenIdle,false);
 	Pbool->Set_help("continuously fires as long as you keep the button pressed.");
-	
+
 	Pbool = secprop->Add_bool("swap34",Property::Changeable::WhenIdle,false);
 	Pbool->Set_help("swap the 3rd and the 4th axis. can be useful for certain joysticks.");
 
@@ -610,7 +618,7 @@ void DOSBOX_Init(void) {
 	secprop=control->AddSection_prop("serial",&SERIAL_Init,true);
 	const char* serials[] = { "dummy", "disabled", "modem", "nullmodem",
 	                          "directserial",0 };
-   
+
 	Pmulti_remain = secprop->Add_multiremain("serial1",Property::Changeable::WhenIdle," ");
 	Pstring = Pmulti_remain->GetSection()->Add_string("type",Property::Changeable::WhenIdle,"dummy");
 	Pmulti_remain->SetValue("dummy");

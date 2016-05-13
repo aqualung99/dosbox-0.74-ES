@@ -21,6 +21,7 @@
 #include "cdrom.h"
 #include "support.h"
 
+#ifndef JOEL_REMOVED
 #if defined (LINUX)
 #include <fcntl.h>
 #include <unistd.h>
@@ -94,4 +95,5 @@ bool CDROM_Interface_Ioctl::SetDevice(char* path, int forceCD)
 	return success;
 }
 
+#endif
 #endif

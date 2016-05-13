@@ -27,6 +27,8 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <assert.h>
+
 #include <sys/types.h>
 #ifdef WIN32
 #include <signal.h>
@@ -35,6 +37,11 @@
 
 #include "cross.h"
 #include "SDL.h"
+
+#ifdef JOEL_REMOVED
+#include <errno.h>
+#endif
+
 
 #include "dosbox.h"
 #include "video.h"
@@ -56,8 +63,9 @@
 
 
 #if C_OPENGL
-#include "SDL_opengl.h"
-#include "SDL_OpenGL_GLExt.h"
+
+#include "SDL2/SDL_opengl.h"
+#include "SDL2/SDL_opengl_glext.h"
 
 #ifndef APIENTRY
 #define APIENTRY
@@ -182,10 +190,15 @@ struct SDL_Block {
 	} priority;
 	SDL_Rect clip;
 	SDL_Window * window;
-	SDL_GLContext context;
 
-	// SDL doesn't fill in the OpenGL 2.x prototypes for us...
+	SDL_GLContext context;
 	//
+	// SDL doesn't fill in the OpenGL 2.x prototypes for us...
+	// We get all dynamic proc address for all OpenGL functions
+	// so that OpenGL-ES works smoothly.
+	//
+    // "Newish-school" OpenGL API
+    //
 	PFNGLCREATESHADERPROC glCreateShader;
 	PFNGLSHADERSOURCEPROC glShaderSource;
 	PFNGLCOMPILESHADERPROC glCompileShader;
@@ -197,6 +210,7 @@ struct SDL_Block {
 	PFNGLGETPROGRAMIVPROC glGetProgramiv;
 	PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog;
 	PFNGLGENBUFFERSPROC glGenBuffers;
+	PFNGLDELETEBUFFERSPROC glDeleteBuffers;
 	PFNGLBINDBUFFERPROC glBindBuffer;
 	PFNGLBUFFERDATAPROC glBufferData;
 	PFNGLDELETEPROGRAMPROC glDeleteProgram;
@@ -222,6 +236,10 @@ struct SDL_Block {
 	GLuint psPalette;
 	GLuint progPalette;
 
+    GLuint vsRect;
+    GLuint psRect;
+    GLuint progRect;
+
 	GLuint vertBuffer;
 	GLuint idxBuffer;
 
@@ -238,10 +256,19 @@ struct SDL_Block {
 	GLint palUvRatioAddr;
 	GLint palAspectFixAddr;
 
+	GLint rectPositionAddr;
+	GLint rectSolidColorAddr;
+
 	GLuint texPalette;
 
 	float windowAspectFor4x3;
 	unsigned nextRenderLineNum;
+
+	timespec clockRes;
+    timespec fpsClockCounter;
+    timespec vgaClockCounter;
+
+
 //	SDL_Renderer * renderer;
 	SDL_cond *cond;
 	struct {
@@ -262,6 +289,27 @@ struct SDL_Block {
 };
 
 static SDL_Block sdl;
+
+
+static GLuint CreateObjectBuffer(GLenum target, const void *buffer_data, GLsizei buffer_size)
+{
+    GLuint buffer;
+
+    sdl.glGenBuffers(1, &buffer);
+	CheckGL;
+    sdl.glBindBuffer(target, buffer);
+	CheckGL;
+    sdl.glBufferData(target, buffer_size, buffer_data, GL_STATIC_DRAW);
+	CheckGL;
+
+    return buffer;
+}
+
+static void DeleteObjectBuffer(GLuint buffer)
+{
+    sdl.glDeleteBuffers(1, &buffer);
+}
+
 
 
 /* static variable to show wether there is not a valid stdout.
@@ -286,9 +334,87 @@ static void GFX_AwaitKeypress(void)
 
 	if (!no_stdout)
 	{
-		fscanf(stdin, "%s", inputBuffer);
+		fgets(inputBuffer, 1024, stdin);
 	}
 }
+
+struct DrawRectData
+{
+    float x1, y1, x2, y2;
+    float r, g, b, a;
+};
+
+static const int MAX_RECT_BUFFER = 32;
+static DrawRectData sg_rectBuffer[MAX_RECT_BUFFER];
+static int sg_nextRectBuffer = 0;
+
+static void GFX_DrawRect(float x1, float y1, float x2, float y2, float r, float g, float b, float a)
+{
+    assert(sg_nextRectBuffer < MAX_RECT_BUFFER);
+
+    sg_rectBuffer[sg_nextRectBuffer].x1 = x1;
+    sg_rectBuffer[sg_nextRectBuffer].y1 = y1;
+    sg_rectBuffer[sg_nextRectBuffer].x2 = x2;
+    sg_rectBuffer[sg_nextRectBuffer].y2 = y2;
+    sg_rectBuffer[sg_nextRectBuffer].r = r;
+    sg_rectBuffer[sg_nextRectBuffer].g = g;
+    sg_rectBuffer[sg_nextRectBuffer].b = b;
+    sg_rectBuffer[sg_nextRectBuffer].a = a;
+
+    sg_nextRectBuffer++;
+}
+
+static void GFX_DrawAllRectBuffers()
+{
+    static float rectVerts[8] = { 0.0f };
+    GLuint vbo;
+
+    sdl.glUseProgram(sdl.progRect);
+    CheckGL;
+    sdl.glGenBuffers(1, &vbo);
+	CheckGL;
+    sdl.glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    CheckGL;
+
+    for (int i = 0; i < sg_nextRectBuffer; i++)
+    {
+        float denormalX1 = (sg_rectBuffer[i].x1 * 2.0f) - 1.0f;
+        float denormalY1 = (sg_rectBuffer[i].y1 * 2.0f) - 1.0f;
+        float denormalX2 = (sg_rectBuffer[i].x2 * 2.0f) - 1.0f;
+        float denormalY2 = (sg_rectBuffer[i].y2 * 2.0f) - 1.0f;
+
+        rectVerts[0] = denormalX1;
+        rectVerts[1] = denormalY2;
+
+        rectVerts[2] = denormalX1;
+        rectVerts[3] = denormalY1;
+
+        rectVerts[4] = denormalX2;
+        rectVerts[5] = denormalY2;
+
+        rectVerts[6] = denormalX2;
+        rectVerts[7] = denormalY1;
+
+        sdl.glBufferData(GL_VERTEX_ARRAY, sizeof(rectVerts), rectVerts, GL_DYNAMIC_DRAW);
+        CheckGL;
+
+		sdl.glEnableVertexAttribArray(sdl.rectPositionAddr);
+		CheckGL;
+
+		sdl.glUniform4f(sdl.rectSolidColorAddr, sg_rectBuffer[i].r, sg_rectBuffer[i].g, sg_rectBuffer[i].b, sg_rectBuffer[i].a);
+        CheckGL;
+
+        glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
+        CheckGL;
+
+        sdl.glDisableVertexAttribArray(sdl.rectPositionAddr);
+    }
+
+    sdl.glDeleteBuffers(1, &vbo);
+
+    sg_nextRectBuffer = 0;
+}
+
 
 extern const char* RunningProgram;
 extern bool CPU_CycleAutoAdjust;
@@ -420,9 +546,9 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 		if (sdl.desktop.fullscreen)
 		{
 /*
-			sdl.window = SDL_CreateWindow("DOSBox", 
-										  SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 
-										  fixedWidth, fixedHeight, 
+			sdl.window = SDL_CreateWindow("DOSBox",
+										  SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+										  fixedWidth, fixedHeight,
 										  sdl_flags | SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS);
 */
 			SDL_SetWindowBordered(sdl.window, SDL_FALSE);
@@ -436,9 +562,9 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 /*
 			if (sdl.window == NULL)
 			{
-				sdl.window = SDL_CreateWindow("DOSBox", 
-											  SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 
-											  fixedWidth, fixedHeight, 
+				sdl.window = SDL_CreateWindow("DOSBox",
+											  SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+											  fixedWidth, fixedHeight,
 											  sdl_flags);
 				sdl.clip.w = fixedWidth;
 				sdl.clip.h = fixedHeight;
@@ -477,6 +603,8 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 		sdl.clip.x=0;sdl.clip.y=0;
 		sdl.clip.w=(Bit16u)(sdl.draw.width*sdl.draw.scalex);
 		sdl.clip.h=(Bit16u)(sdl.draw.height*sdl.draw.scaley);
+		sdl.windowAspectFor4x3 = (4.0f / 3.0f) / ((float)sdl.clip.w / sdl.clip.h);
+
 /*
 		if (sdl.window == NULL)
 		{
@@ -572,17 +700,20 @@ dosurface:
 		{
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, sdl.opengl.pow2TexWidth, sdl.opengl.pow2TexHeight, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, NULL);
 			CheckGL;
-			// Write a blank line at the top
+			// Fill with blank
 			// This alloc is usually 1K
 			//
 			GLubyte *tmpBuf = (GLubyte*)calloc(sdl.opengl.pow2TexWidth, sizeof(GLubyte));
-			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, sdl.opengl.pow2TexHeight - 1, sdl.opengl.pow2TexWidth, 1, GL_LUMINANCE, GL_UNSIGNED_BYTE, tmpBuf);
+			for (int texClear = 0; texClear < sdl.opengl.pow2TexHeight; texClear++)
+			{
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, texClear, sdl.opengl.pow2TexWidth, 1, GL_LUMINANCE, GL_UNSIGNED_BYTE, tmpBuf);
+			}
 			free(tmpBuf);
 		}
 		CheckGL;
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		CheckGL;
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		CheckGL;
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		CheckGL;
@@ -590,7 +721,7 @@ dosurface:
 		CheckGL;
 		sdl.glUseProgram(sdl.progPalette);
 		CheckGL;
-		sdl.glUniform2f(sdl.palOneAddr, 1.0f / (width + 2), 1.0f / (height + 2));
+		sdl.glUniform2f(sdl.palOneAddr, 1.0f / sdl.opengl.pow2TexWidth, 1.0f / sdl.opengl.pow2TexHeight);
 		CheckGL;
 		sdl.glUniform4f(sdl.palSourceSizeAddr, (GLfloat)width + 2, (GLfloat)height + 2, 0.0f, 0.0f);
 		CheckGL;
@@ -650,10 +781,31 @@ static void SwitchFullScreen(bool pressed) {
 	GFX_SwitchFullScreen();
 }
 
+float CountMillisecs(timespec *pStart, timespec *pEnd)
+{
+    time_t secsElapsed = pEnd->tv_sec - pStart->tv_sec;
+    long long nsecsElapsed = secsElapsed * 1000000000L;
+    nsecsElapsed += (pEnd->tv_nsec - pStart->tv_nsec);
 
+    return (float)(nsecsElapsed / 1000000.0);
+}
+
+static unsigned sg_GFXUpdateCounter = 0;
 bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 	if (!sdl.active || sdl.updating)
 		return false;
+
+    timespec lastStart = sdl.fpsClockCounter;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &sdl.fpsClockCounter);
+    float milliElapsed = CountMillisecs(&lastStart, &sdl.fpsClockCounter);
+    float fps = 1000.0f / milliElapsed;
+
+    sg_GFXUpdateCounter++;
+    if (!(sg_GFXUpdateCounter & 0x3F))
+    {
+        // LOG_MSG("%.1f FPS", fps);
+    }
+
 	switch (sdl.desktop.type) {
 #if C_OPENGL
 	case SCREEN_OPENGL:
@@ -661,8 +813,14 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 		//pitch=sdl.opengl.pitch;
 		pixels = 0;
 		pitch = 0;
-		sdl.nextRenderLineNum = sdl.opengl.pow2TexHeight - 2;
+		// OpenGL texture coords are goofy; so we have to fill our
+		// texture from the bottom up
+		//
+		sdl.nextRenderLineNum = sdl.draw.height;
 		sdl.updating=true;
+
+		SDL_GL_SwapWindow(sdl.window);
+
 		sdl.glActiveTexture(GL_TEXTURE0);
 		CheckGL;
 		glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
@@ -682,35 +840,15 @@ void GFX_LineHandler8(const void * src)
     glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
 	CheckGL;
 
-	GLubyte tmpBuf = 0;
-
-	// Write a left-side border texel with color 0
+	// Write VGA line. Note we leave a 1-pixel border
+	// around the edge.
 	//
-	glTexSubImage2D(GL_TEXTURE_2D, 
+	glTexSubImage2D(GL_TEXTURE_2D,
 					0,
-					0, sdl.nextRenderLineNum,
-					1, 1,
-					GL_LUMINANCE, GL_UNSIGNED_BYTE,
-					&tmpBuf);
-
-	// Then write VGA line
-	//
-	glTexSubImage2D(GL_TEXTURE_2D, 
-					0,
-					1, sdl.nextRenderLineNum,
+					1, sdl.nextRenderLineNum--,
 					sdl.draw.width, 1,
 					GL_LUMINANCE, GL_UNSIGNED_BYTE,
 					src);
-
-	// Write a right-side border texel with color 0
-	//
-	glTexSubImage2D(GL_TEXTURE_2D, 
-					0,
-					sdl.draw.width + 1, sdl.nextRenderLineNum--,
-					1, 1,
-					GL_LUMINANCE, GL_UNSIGNED_BYTE,
-					&tmpBuf);
-
 }
 
 void GFX_LineHandler16(const void * src)
@@ -720,30 +858,13 @@ void GFX_LineHandler16(const void * src)
     glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
 	CheckGL;
 
-	GLushort tmpBuf = 0;
-
-	// Write a left-side border texel with color 0
-	//
-	glTexSubImage2D(GL_TEXTURE_2D, 
+	glTexSubImage2D(GL_TEXTURE_2D,
 					0,
-					0, sdl.nextRenderLineNum,
-					1, 1,
-					GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
-					&tmpBuf);
-
-	glTexSubImage2D(GL_TEXTURE_2D, 
-					0,
-					1, sdl.nextRenderLineNum,
+					1, sdl.nextRenderLineNum--,
 					sdl.draw.width, 1,
 					GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
 					src);
 
-	glTexSubImage2D(GL_TEXTURE_2D, 
-					0,
-					sdl.draw.width + 1, sdl.nextRenderLineNum--,
-					1, 1,
-					GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
-					&tmpBuf);
 }
 
 void GFX_LineHandler32(const void * src)
@@ -753,28 +874,13 @@ void GFX_LineHandler32(const void * src)
     glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
 	CheckGL;
 
-	GLuint tmpBuf = 0;
-
-	glTexSubImage2D(GL_TEXTURE_2D, 
+	glTexSubImage2D(GL_TEXTURE_2D,
 					0,
-					0, sdl.nextRenderLineNum,
-					1, 1,
-					GL_BGRA_EXT, GL_UNSIGNED_INT_8_8_8_8_REV,
-					&tmpBuf);
-
-	glTexSubImage2D(GL_TEXTURE_2D, 
-					0,
-					0, sdl.nextRenderLineNum,
+					0, sdl.nextRenderLineNum--,
 					sdl.draw.width, 1,
 					GL_BGRA_EXT, GL_UNSIGNED_INT_8_8_8_8_REV,
 					src);
 
-	glTexSubImage2D(GL_TEXTURE_2D, 
-					0,
-					sdl.draw.width + 1, sdl.nextRenderLineNum--,
-					1, 1,
-					GL_BGRA_EXT, GL_UNSIGNED_INT_8_8_8_8_REV,
-					&tmpBuf);
 }
 
 
@@ -790,16 +896,6 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
             glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
 			CheckGL;
 
-			// Draw the final border line of 0's across the bottom
-			//
-			if (sdl.draw.bpp == 8)
-			{
-				// This allocation is usually 1K.
-				//
-				GLubyte *tmpBuf = (GLubyte*)calloc(sdl.opengl.pow2TexWidth, sizeof(GLubyte));
-				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, sdl.opengl.pow2TexHeight - (sdl.draw.height + 2), sdl.draw.width + 2, 1, GL_LUMINANCE, GL_UNSIGNED_BYTE, tmpBuf);
-				free(tmpBuf);
-			}
 			sdl.glActiveTexture(GL_TEXTURE1);
 			CheckGL;
 			glBindTexture(GL_TEXTURE_2D, sdl.texPalette);
@@ -817,8 +913,6 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 			CheckGL;
 			sdl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sdl.idxBuffer);
 			CheckGL;
-			sdl.glVertexAttribPointer(sdl.palPositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
-			CheckGL;
 
 			sdl.glEnableVertexAttribArray(sdl.palPositionAddr);
 			CheckGL;
@@ -827,11 +921,9 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 			sdl.glDisableVertexAttribArray(sdl.palPositionAddr);
 			CheckGL;
 
-			// Check for palettized vs. bitmapped
-			//
-			//if (sdl.
-			//glTexImage2D(
-			SDL_GL_SwapWindow(sdl.window);
+            GFX_DrawAllRectBuffers();
+
+			//SDL_GL_SwapWindow(sdl.window);
 		break;
 #endif	// C_OPENGL
 	default:
@@ -841,7 +933,6 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 
 
 void GFX_SetPalette(Bitu start,Bitu count,GFX_PalEntry * entries) {
-	/* I should probably not change the GFX_PalEntry :) */
 	// The palette is just a 1-dimensional texture.
 	// It's the 2nd texture, stored at index 1
 	//
@@ -988,20 +1079,6 @@ static void OutputStringGL(Bitu x,Bitu y,const char * text,Bit32u color,Bit32u c
 	}
 }
 
-static GLuint CreateObjectBuffer(GLenum target, const void *buffer_data, GLsizei buffer_size) 
-{
-    GLuint buffer;
-
-    sdl.glGenBuffers(1, &buffer);
-	CheckGL;
-    sdl.glBindBuffer(target, buffer);
-	CheckGL;
-    sdl.glBufferData(target, buffer_size, buffer_data, GL_STATIC_DRAW);
-	CheckGL;
-
-    return buffer;
-}
-
 static GLuint CreateProgram(GLuint vertexShader, GLuint fragmentShader)
 {
 	GLuint prog = sdl.glCreateProgram();
@@ -1094,18 +1171,33 @@ static GLuint CreateProgram(GLuint vertexShader, GLuint fragmentShader)
 	}
 }
 
+
+inline const char *os_separator()
+{
+#if defined _WIN32 || defined __CYGWIN__
+    return "\\";
+#else
+    return "/";
+#endif
+}
+
 static GLuint LoadShader(const char *szShaderFile, GLenum shaderType)
 {
-	static char *pathPrep = "shaders\\";
+	static const char *pathPrep = "../shaders";
 
-	char *szBuffer = (char*)malloc(strnlen(szShaderFile, 1024) + strlen(pathPrep) + 1);
+	char *szBuffer = (char*)malloc(strnlen(szShaderFile, 1024) + strlen(pathPrep) + 2);
 	strcpy(szBuffer, pathPrep);
+//	strncat(szBuffer, os_separator(), 1024);
+//	strncat(szBuffer, "shaders", 1024);
+	strncat(szBuffer, os_separator(), 1024);
 	strncat(szBuffer, szShaderFile, 1024);
 
-	FILE *fp = fopen(szBuffer, "rt");
+	FILE *fp = fopen(szBuffer, "r");
 	if (!fp)
 	{
-		LOG_MSG("Could not open file \"%s\"", szShaderFile);
+		//perror(szBuffer);
+		const char *szErr = strerror(errno);
+		LOG_MSG("Could not open file \"%s\"\nError was: %s", szShaderFile, szErr);
 		GFX_AwaitKeypress();
 		return 0;
 	}
@@ -1184,13 +1276,13 @@ static GLuint LoadShader(const char *szShaderFile, GLenum shaderType)
 	}
 }
 
-static const GLfloat g_vertex_buffer_data[] = { 
+static const GLfloat gc_vertex_buffer_data[] = {
     -1.0f,  1.0f,
     -1.0f, -1.0f,
      1.0f,  1.0f,
      1.0f, -1.0f
 };
-static const GLubyte g_element_buffer_data[] = { 0, 1, 2, 3 };
+static const GLubyte gc_element_buffer_data[] = { 0, 1, 2, 3 };
 
 static unsigned char logo[32*32*4]= {
 #include "dosbox_logo.h"
@@ -1306,6 +1398,9 @@ static void GUI_StartUp(Section * sec) {
 	sdl.desktop.want_type=SCREEN_OPENGL;
 	sdl.opengl.bilinear=true;
 
+	clock_getres(CLOCK_MONOTONIC_RAW, &sdl.clockRes);
+    LOG_MSG("Clock resolution is %d seconds, %d nanoseconds", sdl.clockRes.tv_sec, sdl.clockRes.tv_nsec);
+
 #if C_OPENGL
    if(sdl.desktop.want_type==SCREEN_OPENGL){ /* OPENGL is requested */
 	sdl.opengl.framebuf=0;
@@ -1330,8 +1425,18 @@ static void GUI_StartUp(Section * sec) {
 	sdl.context = SDL_GL_CreateContext(sdl.window);
 
 	glGetIntegerv (GL_MAX_TEXTURE_SIZE, &sdl.opengl.max_texsize);
+	if (!sdl.opengl.max_texsize)
+	{
+        // If the EGL driver didn't help us out by telling us,
+        // then assume it's 1024. That should be the minimum, unless
+        // the device is very old.
+        //
+        sdl.opengl.max_texsize = 1024;
+	}
 	CheckGL;
 
+    LOG_MSG("OpenGL-ES\nVendor: %s\nRenderer: %s\nVersion: %s\nShader Version: %s", glGetString(GL_VENDOR), glGetString(GL_RENDERER), glGetString(GL_VERSION), glGetString(GL_SHADING_LANGUAGE_VERSION));
+    fprintf(stdout, "Extentions: %s\r\n", glGetString(GL_EXTENSIONS));
 
 	// We use OpenGL 2.1 prototypes. This is around 2006 - 2007 era of tech,
 	// but at that time only high-end PCs would have graphics cards capable of this.
@@ -1347,6 +1452,7 @@ static void GUI_StartUp(Section * sec) {
 	sdl.glGetProgramiv = (PFNGLGETPROGRAMIVPROC)SDL_GL_GetProcAddress("glGetProgramiv");
 	sdl.glGetProgramInfoLog = (PFNGLGETPROGRAMINFOLOGPROC)SDL_GL_GetProcAddress("glGetProgramInfoLog");
 	sdl.glGenBuffers = (PFNGLGENBUFFERSPROC)SDL_GL_GetProcAddress("glGenBuffers");
+	sdl.glDeleteBuffers = (PFNGLDELETEBUFFERSPROC)SDL_GL_GetProcAddress("glDeleteBuffers");
 	sdl.glBindBuffer = (PFNGLBINDBUFFERPROC)SDL_GL_GetProcAddress("glBindBuffer");
 	sdl.glBufferData = (PFNGLBUFFERDATAPROC)SDL_GL_GetProcAddress("glBufferData");
 	sdl.glDeleteProgram = (PFNGLDELETEPROGRAMPROC)SDL_GL_GetProcAddress("glDeleteProgram");
@@ -1364,19 +1470,49 @@ static void GUI_StartUp(Section * sec) {
 	sdl.glGetActiveAttrib = (PFNGLGETACTIVEATTRIBPROC)SDL_GL_GetProcAddress("glGetActiveAttrib");
 	sdl.glGetActiveUniform = (PFNGLGETACTIVEUNIFORMPROC)SDL_GL_GetProcAddress("glGetActiveUniform");
 
-	sdl.vertBuffer = CreateObjectBuffer(GL_ARRAY_BUFFER, g_vertex_buffer_data, sizeof(g_vertex_buffer_data));
+	sdl.vertBuffer = CreateObjectBuffer(GL_ARRAY_BUFFER, gc_vertex_buffer_data, sizeof(gc_vertex_buffer_data));
 	CheckGL;
-	sdl.idxBuffer = CreateObjectBuffer(GL_ELEMENT_ARRAY_BUFFER, g_element_buffer_data, sizeof(g_element_buffer_data));
+	sdl.idxBuffer = CreateObjectBuffer(GL_ELEMENT_ARRAY_BUFFER, gc_element_buffer_data, sizeof(gc_element_buffer_data));
 	CheckGL;
 
+#ifdef _SDL_USE_EGL
+	sdl.vsSimple = LoadShader("simple.evs", GL_VERTEX_SHADER);
+	sdl.psSimple = LoadShader("simple.eps", GL_FRAGMENT_SHADER);
+#else
 	sdl.vsSimple = LoadShader("simple.vs", GL_VERTEX_SHADER);
 	sdl.psSimple = LoadShader("simple.ps", GL_FRAGMENT_SHADER);
+#endif // _SDL_USE_EGL
 	sdl.progSimple = CreateProgram(sdl.vsSimple, sdl.psSimple);
 
-	// Vertex shader is the same
+    if (sdl.progSimple < 0)
+    {
+        exit(-1);
+    }
+
+#ifdef _SDL_USE_EGL
+	sdl.vsPalette = LoadShader("pal.evs", GL_VERTEX_SHADER);
+	sdl.psPalette = LoadShader("pal2.eps", GL_FRAGMENT_SHADER);
+#else
 	sdl.vsPalette = LoadShader("pal.vs", GL_VERTEX_SHADER);
 	sdl.psPalette = LoadShader("pal2.ps", GL_FRAGMENT_SHADER);
+#endif // _SDL_USE_EGL
+
 	sdl.progPalette = CreateProgram(sdl.vsPalette, sdl.psPalette);
+
+    if (sdl.progPalette < 0)
+    {
+        exit(-1);
+    }
+
+#ifdef _SDL_USE_EGL
+	sdl.vsRect = LoadShader("solidRect.evs", GL_VERTEX_SHADER);
+	sdl.psRect = LoadShader("solidRect.eps", GL_FRAGMENT_SHADER);
+#else
+	sdl.vsRect = LoadShader("solidRect.vs", GL_VERTEX_SHADER);
+	sdl.psRect = LoadShader("solidRect.ps", GL_FRAGMENT_SHADER);
+#endif // _SDL_USE_EGL
+
+	sdl.progRect = CreateProgram(sdl.vsPalette, sdl.psPalette);
 
 	glGenTextures(1, &sdl.texPalette);
 	CheckGL;
@@ -1385,7 +1521,9 @@ static void GUI_StartUp(Section * sec) {
 	CheckGL;
 	glBindTexture(GL_TEXTURE_2D, sdl.texPalette);
 	CheckGL;
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	Bit32u *rgBlackPal = (Bit32u*)alloca(256 * sizeof(Bit32u));
+	memset(rgBlackPal, 0, 256 * sizeof(Bit32u));
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgBlackPal);
 	CheckGL;
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	CheckGL;
@@ -1401,8 +1539,8 @@ static void GUI_StartUp(Section * sec) {
 	{
 		sdl.opengl.packed_pixel=(strstr(gl_ext,"EXT_packed_pixels") > 0);
 		sdl.opengl.paletted_texture=(strstr(gl_ext,"EXT_paletted_texture") > 0);
-    } 
-	else 
+    }
+	else
 	{
 		sdl.opengl.packed_pixel=sdl.opengl.paletted_texture=false;
 	}
@@ -1434,7 +1572,7 @@ static void GUI_StartUp(Section * sec) {
 		CheckGL;
 
 		// We never need any Z buffer support. This frees-up lots
-		// of GPU resources for us.
+		// of GPU resources for us (one would think.)
 		//
 		glDisable(GL_DEPTH_TEST);
 		CheckGL;
@@ -1453,7 +1591,7 @@ static void GUI_StartUp(Section * sec) {
 
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 640, 400, 0, GL_RGB, GL_UNSIGNED_BYTE, tmpbufp);
 		CheckGL;
-		
+
 		sdl.glUseProgram(sdl.progSimple);
 		CheckGL;
 		sdl.simpleTexUnitAddr = sdl.glGetUniformLocation(sdl.progSimple, "texUnit");
@@ -1461,6 +1599,9 @@ static void GUI_StartUp(Section * sec) {
 		sdl.simpleFadeFactorAddr = sdl.glGetUniformLocation(sdl.progSimple, "fadeFactor");
 		CheckGL;
 		sdl.simplePositionAddr = sdl.glGetAttribLocation(sdl.progSimple, "position");
+		CheckGL;
+
+		sdl.glVertexAttribPointer(sdl.simplePositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
 		CheckGL;
 
 		sdl.glUseProgram(sdl.progPalette);
@@ -1482,6 +1623,19 @@ static void GUI_StartUp(Section * sec) {
 		sdl.palAspectFixAddr = sdl.glGetUniformLocation(sdl.progPalette, "aspectFix");
 		CheckGL;
 
+        sdl.glVertexAttribPointer(sdl.palPositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
+        CheckGL;
+
+        sdl.glUseProgram(sdl.progRect);
+        CheckGL;
+        sdl.rectPositionAddr = sdl.glGetAttribLocation(sdl.progRect, "position");
+        CheckGL;
+        sdl.rectSolidColorAddr = sdl.glGetUniformLocation(sdl.progRect, "solidColor");
+        CheckGL;
+		sdl.glVertexAttribPointer(sdl.rectPositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
+		CheckGL;
+
+
 		// Now get ready to draw the logo
 		//
 		sdl.glUseProgram(sdl.progSimple);
@@ -1493,8 +1647,6 @@ static void GUI_StartUp(Section * sec) {
 		CheckGL;
 
 		sdl.glBindBuffer(GL_ARRAY_BUFFER, sdl.vertBuffer);
-		CheckGL;
-		sdl.glVertexAttribPointer(sdl.simplePositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
 		CheckGL;
 		sdl.glEnableVertexAttribArray(sdl.simplePositionAddr);
 		CheckGL;
@@ -1521,7 +1673,7 @@ static void GUI_StartUp(Section * sec) {
 			}
 			if (exit_splash) break;
 
-			if (ct<1) 
+			if (ct<1)
 			{
 				glClear(GL_COLOR_BUFFER_BIT);
 				CheckGL;
@@ -1535,9 +1687,9 @@ static void GUI_StartUp(Section * sec) {
 				CheckGL;
 				SDL_GL_SwapWindow(sdl.window);
 			}
-			else if (ct>=max_splash_loop-splash_fade) 
+			else if (ct>=max_splash_loop-splash_fade)
 			{
-				if (use_fadeout) 
+				if (use_fadeout)
 				{
 					glClear(GL_COLOR_BUFFER_BIT);
 					CheckGL;
@@ -1555,7 +1707,7 @@ static void GUI_StartUp(Section * sec) {
 			}
 		}
 
-		if (use_fadeout) 
+		if (use_fadeout)
 		{
 			glClear(GL_COLOR_BUFFER_BIT);
 			CheckGL;
@@ -1568,6 +1720,9 @@ static void GUI_StartUp(Section * sec) {
 		// On older hardware it will still be expensive
 		//
 		glDisable(GL_BLEND);
+		CheckGL;
+
+		glDeleteTextures(1, &splashTex);
 		CheckGL;
 	}
 
@@ -1793,6 +1948,12 @@ static BOOL WINAPI ConsoleEventHandler(DWORD event) {
 }
 #endif
 
+SDL_Window *GetInputWindow()
+{
+    return sdl.window;
+}
+
+
 void Config_Add_SDL() {
 	Section_prop * sdl_sec=control->AddSection_prop("sdl",&GUI_StartUp);
 	sdl_sec->AddInitFunction(&MAPPER_StartUp);
@@ -1801,61 +1962,57 @@ void Config_Add_SDL() {
 	Prop_int* Pint;
 	Prop_multival* Pmulti;
 
-	Pbool = sdl_sec->Add_bool("fullscreen",Property::Changeable::Always,false);
+	Pbool = sdl_sec->Add_bool("fullscreen",Property::Changeable::DBoxAlways,false);
 	Pbool->Set_help("Start dosbox directly in fullscreen. (Press ALT-Enter to go back)");
-     
-	Pbool = sdl_sec->Add_bool("fulldouble",Property::Changeable::Always,false);
+
+	Pbool = sdl_sec->Add_bool("fulldouble",Property::Changeable::DBoxAlways,false);
 	Pbool->Set_help("Use double buffering in fullscreen. It can reduce screen flickering, but it can also result in a slow DOSBox.");
 
-	Pstring = sdl_sec->Add_string("fullresolution",Property::Changeable::Always,"original");
+	Pstring = sdl_sec->Add_string("fullresolution",Property::Changeable::DBoxAlways,"original");
 	Pstring->Set_help("What resolution to use for fullscreen: original or fixed size (e.g. 1024x768).\n"
 	                  "  Using your monitor's native resolution with aspect=true might give the best results.\n"
 			  "  If you end up with small window on a large screen, try an output different from surface.");
 
-	Pstring = sdl_sec->Add_string("windowresolution",Property::Changeable::Always,"original");
+	Pstring = sdl_sec->Add_string("windowresolution",Property::Changeable::DBoxAlways,"original");
 	Pstring->Set_help("Scale the window to this size IF the output device supports hardware scaling.\n"
 	                  "  (output=surface does not!)");
 
 	const char* outputs[] = {
-		"surface", "overlay",
 #if C_OPENGL
-		"opengl", "openglnb",
-#endif
-#if (HAVE_DDRAW_H) && defined(WIN32)
-		"ddraw",
+		"opengl", "opengles",
 #endif
 		0 };
-	Pstring = sdl_sec->Add_string("output",Property::Changeable::Always,"surface");
+	Pstring = sdl_sec->Add_string("output",Property::Changeable::DBoxAlways,"surface");
 	Pstring->Set_help("What video system to use for output.");
 	Pstring->Set_values(outputs);
 
-	Pbool = sdl_sec->Add_bool("autolock",Property::Changeable::Always,true);
+	Pbool = sdl_sec->Add_bool("autolock",Property::Changeable::DBoxAlways,true);
 	Pbool->Set_help("Mouse will automatically lock, if you click on the screen. (Press CTRL-F10 to unlock)");
 
-	Pint = sdl_sec->Add_int("sensitivity",Property::Changeable::Always,100);
+	Pint = sdl_sec->Add_int("sensitivity",Property::Changeable::DBoxAlways,100);
 	Pint->SetMinMax(1,1000);
 	Pint->Set_help("Mouse sensitivity.");
 
-	Pbool = sdl_sec->Add_bool("waitonerror",Property::Changeable::Always, true);
+	Pbool = sdl_sec->Add_bool("waitonerror",Property::Changeable::DBoxAlways, true);
 	Pbool->Set_help("Wait before closing the console if dosbox has an error.");
 
-	Pmulti = sdl_sec->Add_multi("priority", Property::Changeable::Always, ",");
+	Pmulti = sdl_sec->Add_multi("priority", Property::Changeable::DBoxAlways, ",");
 	Pmulti->SetValue("higher,normal");
 	Pmulti->Set_help("Priority levels for dosbox. Second entry behind the comma is for when dosbox is not focused/minimized.\n"
 	                 "  pause is only valid for the second entry.");
 
 	const char* actt[] = { "lowest", "lower", "normal", "higher", "highest", "pause", 0};
-	Pstring = Pmulti->GetSection()->Add_string("active",Property::Changeable::Always,"higher");
+	Pstring = Pmulti->GetSection()->Add_string("active",Property::Changeable::DBoxAlways,"higher");
 	Pstring->Set_values(actt);
 
 	const char* inactt[] = { "lowest", "lower", "normal", "higher", "highest", "pause", 0};
-	Pstring = Pmulti->GetSection()->Add_string("inactive",Property::Changeable::Always,"normal");
+	Pstring = Pmulti->GetSection()->Add_string("inactive",Property::Changeable::DBoxAlways,"normal");
 	Pstring->Set_values(inactt);
 
-	Pstring = sdl_sec->Add_path("mapperfile",Property::Changeable::Always,MAPPERFILE);
+	Pstring = sdl_sec->Add_path("mapperfile",Property::Changeable::DBoxAlways,MAPPERFILE);
 	Pstring->Set_help("File used to load/save the key/event mappings from. Resetmapper only works with the defaul value.");
 
-	Pbool = sdl_sec->Add_bool("usescancodes",Property::Changeable::Always,true);
+	Pbool = sdl_sec->Add_bool("usescancodes",Property::Changeable::DBoxAlways,true);
 	Pbool->Set_help("Avoid usage of symkeys, might not work on all operating systems.");
 }
 
@@ -1874,7 +2031,7 @@ static void show_warning(char const * const message) {
 	Bit32u bmask = 0x0000ff00;
 #else
 	Bit32u rmask = 0x000000ff;
-	Bit32u gmask = 0x0000ff00;                    
+	Bit32u gmask = 0x0000ff00;
 	Bit32u bmask = 0x00ff0000;
 #endif
 	GLuint splashTex = 0;
@@ -1886,12 +2043,12 @@ static void show_warning(char const * const message) {
 	int x = 120,y = 20;
 	std::string m(message),m2;
 	std::string::size_type a,b,c,d;
-   
+
 	while(m.size()) { //Max 50 characters. break on space before or on a newline
 		c = m.find('\n');
 		d = m.rfind(' ',50);
 		if(c>d) a=b=d; else a=b=c;
-		if( a != std::string::npos) b++; 
+		if( a != std::string::npos) b++;
 		m2 = m.substr(0,a); m.erase(0,b);
 		OutputStringGL(x,y,m2.c_str(),0xffffffff,0,surfaceBuffer);
 		y += 20;
@@ -1911,11 +2068,6 @@ static void show_warning(char const * const message) {
 
 	sdl.glBindBuffer(GL_ARRAY_BUFFER, sdl.vertBuffer);
 	CheckGL;
-	sdl.glVertexAttribPointer(sdl.simplePositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
-	CheckGL;
-	sdl.glEnableVertexAttribArray(sdl.simplePositionAddr);
-	CheckGL;
-
 	sdl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sdl.idxBuffer);
 	CheckGL;
 
@@ -1929,7 +2081,7 @@ static void show_warning(char const * const message) {
 
 	SDL_Delay(12000);
 }
-   
+
 static void launcheditor() {
 	std::string path,file;
 	Cross::CreatePlatformConfigDir(path);
@@ -1984,7 +2136,7 @@ static void printconfiglocation() {
 	Cross::CreatePlatformConfigDir(path);
 	Cross::GetPlatformConfigName(file);
 	path += file;
-     
+
 	FILE* f = fopen(path.c_str(),"r");
 	if(!f && !control->PrintConfig(path.c_str())) {
 		printf("tried creating %s. but failed",path.c_str());
@@ -2109,12 +2261,12 @@ int main(int argc, char* argv[]) {
 #if SDL_VERSION_ATLEAST(1, 2, 14)
 	putenv(const_cast<char*>("SDL_DISABLE_LOCK_KEYS=1"));
 #endif
-	if ( SDL_Init( SDL_INIT_AUDIO|SDL_INIT_VIDEO|SDL_INIT_TIMER|SDL_INIT_EVENTS) < 0 ) 
+	if ( SDL_Init( SDL_INIT_AUDIO|SDL_INIT_VIDEO|SDL_INIT_TIMER|SDL_INIT_EVENTS) < 0 )
 		E_Exit("Can't init SDL %s",SDL_GetError());
 	sdl.inited = true;
 
 #ifndef DISABLE_JOYSTICK
-	if( SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) < 0 ) 
+	if( SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) < 0 )
 		LOG_MSG("Failed to init joystick support");
 #endif
 

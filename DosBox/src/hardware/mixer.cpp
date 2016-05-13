@@ -18,7 +18,7 @@
 
 /* $Id: mixer.cpp,v 1.54 2009-09-05 11:10:04 qbix79 Exp $ */
 
-/* 
+/*
 	Remove the sdl code from here and have it handeld in the sdlmain.
 	That should call the mixer start from there or something.
 */
@@ -62,7 +62,7 @@ static INLINE Bit16s MIXER_CLIP(Bits SAMP) {
 	} else return MAX_AUDIO;
 }
 
-static struct {
+static struct _mixer {
 	Bit32s work[MIXER_BUFSIZE][2];
 	Bitu pos,done;
 	Bitu needed, min_needed, max_needed;
@@ -72,6 +72,7 @@ static struct {
 	bool nosound;
 	Bit32u freq;
 	Bit32u blocksize;
+//	SDL_mutex mixer_mutex;
 } mixer;
 
 Bit8u MixTemp[MIXER_BUFSIZE];
@@ -261,7 +262,7 @@ thestart:
 
 void MixerChannel::AddStretched(Bitu len,Bit16s * data) {
 	if (done>=needed) {
-		LOG_MSG("Can't add, buffer full");	
+		LOG_MSG("Can't add, buffer full");
 		return;
 	}
 	Bitu outlen=needed-done;Bits diff;
@@ -349,7 +350,7 @@ void MixerChannel::FillUp(void) {
 
 extern bool ticksLocked;
 static inline bool Mixer_irq_important(void) {
-	/* In some states correct timing of the irqs is more important then 
+	/* In some states correct timing of the irqs is more important then
 	 * non stuttering audo */
 	return (ticksLocked || (CaptureState & (CAPTURE_WAVE|CAPTURE_VIDEO)));
 }
@@ -364,7 +365,7 @@ static void MIXER_MixData(Bitu needed) {
 	if (CaptureState & (CAPTURE_WAVE|CAPTURE_VIDEO)) {
 		Bit16s convert[1024][2];
 		Bitu added=needed-mixer.done;
-		if (added>1024) 
+		if (added>1024)
 			added=1024;
 		Bitu readpos=(mixer.pos+mixer.done)&MIXER_BUFMASK;
 		for (Bitu i=0;i<added;i++) {
@@ -465,7 +466,7 @@ static void MIXER_CallBack(void * userdata, Uint8 *stream, int len) {
 //		LOG_MSG("overflow run need %d, have %d, min %d", need, mixer.done, mixer.min_needed);
 		if (mixer.done > MIXER_BUFSIZE)
 			index_add = MIXER_BUFSIZE - 2*mixer.min_needed;
-		else 
+		else
 			index_add = mixer.done - 2*mixer.min_needed;
 		index_add = (index_add << MIXER_SHIFT) / need;
 		reduce = mixer.done - 2* mixer.min_needed;
@@ -476,7 +477,7 @@ static void MIXER_CallBack(void * userdata, Uint8 *stream, int len) {
 		if (chan->done>reduce) chan->done-=reduce;
 		else chan->done=0;
 	}
-   
+
 	// Reset mixer.tick_add when irqs are important
 	if( Mixer_irq_important() )
 		mixer.tick_add=(mixer.freq<< MIXER_SHIFT)/1000;
@@ -566,7 +567,7 @@ public:
 		chan=mixer.channels;
 		WriteOut("Channel  Main    Main(dB)\n");
 		ShowVolume("MASTER",mixer.mastervol[0],mixer.mastervol[1]);
-		for (chan=mixer.channels;chan;chan=chan->next) 
+		for (chan=mixer.channels;chan;chan=chan->next)
 			ShowVolume(chan->name,chan->volmain[0],chan->volmain[1]);
 	}
 private:
@@ -579,7 +580,7 @@ private:
 
 	void ListMidi(){
 #if defined (WIN32)
-		unsigned int total = midiOutGetNumDevs();	
+		unsigned int total = midiOutGetNumDevs();
 		for(unsigned int i=0;i<total;i++) {
 			MIDIOUTCAPS mididev;
 			midiOutGetDevCaps(i, &mididev, sizeof(MIDIOUTCAPS));
@@ -612,6 +613,48 @@ MixerObject::~MixerObject(){
 	MIXER_DelChannel(MIXER_FindChannel(m_name));
 }
 
+/*
+void Mixer_ThreadProc(void*args)
+{
+    _mixer *pMixer = (_mixer*)args;
+
+	SDL_AudioSpec spec;
+	SDL_AudioSpec obtained;
+
+	spec.freq=pMixer->freq;
+	spec.format=AUDIO_S16SYS;
+	spec.channels=2;
+	spec.callback=MIXER_CallBack;
+	spec.userdata=NULL;
+	spec.samples=(Uint16)pMixer->blocksize;
+
+	pMixer->tick_remain=0;
+	if (pMixer->nosound) {
+		LOG_MSG("MIXER:No Sound Mode Selected.");
+		pMixer->tick_add=((mixer.freq) << MIXER_SHIFT)/1000;
+		TIMER_AddTickHandler(MIXER_Mix_NoSound);
+	} else if (SDL_OpenAudio(&spec, &obtained) <0 ) {
+		pMixer->nosound = true;
+		LOG_MSG("MIXER:Can't open audio: %s , running in nosound mode.",SDL_GetError());
+		pMixer->tick_add=((pMixer->freq) << MIXER_SHIFT)/1000;
+		TIMER_AddTickHandler(MIXER_Mix_NoSound);
+	} else {
+		if((pMixer->freq != obtained.freq) || (pMixer->blocksize != obtained.samples))
+			LOG_MSG("MIXER:Got different values from SDL: freq %d, blocksize %d",obtained.freq,obtained.samples);
+		pMixer->freq=obtained.freq;
+		pMixer->blocksize=obtained.samples;
+		pMixer->tick_add=(pMixer->freq << MIXER_SHIFT)/1000;
+		TIMER_AddTickHandler(MIXER_Mix);
+		SDL_PauseAudio(0);
+	}
+	pMixer->min_needed=section->Get_int("prebuffer");
+	if (pMixer->min_needed>100) pMixer->min_needed=100;
+	pMixer->min_needed=(pMixer->freq*pMixer->min_needed)/1000;
+	pMixer->max_needed=pMixer->blocksize * 2 + 2*pMixer->min_needed;
+	pMixer->needed=pMixer->min_needed+1;
+	PROGRAMS_MakeFile("MIXER.COM",MIXER_ProgramStart);
+}
+*/
 
 void MIXER_Init(Section* sec) {
 	sec->AddDestroyFunction(&MIXER_Stop);
@@ -629,6 +672,13 @@ void MIXER_Init(Section* sec) {
 	memset(mixer.work,0,sizeof(mixer.work));
 	mixer.mastervol[0]=1.0f;
 	mixer.mastervol[1]=1.0f;
+
+
+    int numDevices = SDL_GetNumAudioDevices(0);
+    for (int i = 0; i < numDevices; i++)
+    {
+        LOG_MSG("Audio device %d: %s", i, SDL_GetAudioDeviceName(i, 0));
+    }
 
 	/* Start the Mixer using SDL Sound at 22 khz */
 	SDL_AudioSpec spec;

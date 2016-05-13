@@ -17,7 +17,11 @@
 #include "SDL_thread.h"
 
 #if defined(C_SDL_SOUND)
+#ifndef JOEL_REMOVED
 #include "SDL_sound.h"
+#else
+#include "SDL/SDL_sound.h"
+#endif	// JOEL_REMOVED
 #endif
 
 #ifdef JOEL_REMOVED
@@ -366,7 +370,9 @@ private:
 #endif /* WIN 32 */
 
 #if defined (LINUX) || defined(OS2)
-
+#ifndef JOEL_REMOVED
+// SDL 2.0 doesn't have any CD-ROM support anymore
+//
 class CDROM_Interface_Ioctl : public CDROM_Interface_SDL
 {
 public:
@@ -379,7 +385,7 @@ public:
 private:
 	char	device_name[512];
 };
-
+#endif  // JOEL_REMOVED
 #endif /* LINUX */
 
 #endif /* __CDROM_INTERFACE__ */
