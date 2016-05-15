@@ -1,0 +1,24 @@
+#version 100
+
+precision mediump float;
+precision mediump int;
+
+uniform sampler2D texUnit;
+uniform vec4 sourceSize;
+uniform sampler2D palUnit;
+uniform vec2 one;
+uniform vec2 uvRatio;
+
+varying vec2 tcNorm;
+
+
+// PAL() takes an 8-bit value as a U texture coordinate and does
+// a lookup into the palette texture to return RGB values for that index
+// 
+#define PAL(p)	 			texture2D(palUnit, vec2((p),0.5))
+#define LOOKUP(c)			PAL(texture2D(texUnit, (c) * uvRatio).x)
+
+
+void main() {
+	gl_FragColor = LOOKUP(tcNorm);
+}

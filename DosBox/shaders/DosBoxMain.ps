@@ -10,11 +10,12 @@ uniform vec2 one;
 uniform vec2 uvRatio;
 
 varying vec2 tcNorm;
-// varying vec2 texcoord;
 
 // Enable screen curvature.
 #define CURVATURE
-#define USEGAUSSIAN
+// #define USEGAUSSIAN
+#define USE_INPUT_GAMMA
+#define USE_OUTPUT_GAMMA
 
 // Controls the intensity of the barrel distortion used to emulate the
 // curvature of a CRT. 0.0 is perfectly flat, 1.0 is annoyingly
@@ -141,8 +142,8 @@ void main() {
 	// Output pixels are alternately tinted green and magenta.
 	//
 	vec3 dotMaskWeights = mix(
-			vec3(1.025, 0.975, 1.025),
-			vec3(0.975, 1.025, 0.975),
+			vec3(1.0125, 0.9875, 1.0125),
+			vec3(0.9875, 1.0125, 0.9875),
 			floor(mod(ratio_scale.x, 2.0))
 		);
 
