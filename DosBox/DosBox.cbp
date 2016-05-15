@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="DosBox" />
+		<Option makefile_is_custom="1" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Debug">
+				<Option output="src/dosbox" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="src" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+				<MakeCommands>
+					<Build command='$make -j4 -f $makefile CXXFLAGS=&quot;-g3 -O0&quot;' />
+					<CompileFile command="$make -f $makefile $file" />
+					<Clean command="$make -f $makefile clean" />
+					<DistClean command="$make -f $makefile distclean$target" />
+					<AskRebuildNeeded command="$make -q -f $makefile" />
+					<SilentBuild command='$make -j4 -f $makefile CXXFLAGS=&quot;-g3 -O0&quot; &gt; $(CMD_NULL)' />
+				</MakeCommands>
+			</Target>
+			<Target title="Release">
+				<Option output="src/dosbox" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="src" />
+				<Option object_output="obj/Release/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-O2" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+				<MakeCommands>
+					<Build command='$make -j4 -f $makefile CXXFLAGS=&quot;-g -O3&quot;' />
+					<CompileFile command="$make -f $makefile $file" />
+					<Clean command="$make -f $makefile clean" />
+					<DistClean command="$make -f $makefile distclean$target" />
+					<AskRebuildNeeded command="$make -q -f $makefile" />
+					<SilentBuild command='$make -j4 -f $makefile CXXFLAGS=&quot;-g -O3&quot; &gt; $(CMD_NULL)' />
+				</MakeCommands>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+			<Add option="-fexceptions" />
+		</Compiler>
+		<Unit filename="config.h" />
+		<Unit filename="include/bios.h" />
+		<Unit filename="include/bios_disk.h" />
+		<Unit filename="include/callback.h" />
+		<Unit filename="include/control.h" />
+		<Unit filename="include/cpu.h" />
+		<Unit filename="include/cross.h" />
+		<Unit filename="include/debug.h" />
+		<Unit filename="include/dma.h" />
+		<Unit filename="include/dos_inc.h" />
+		<Unit filename="include/dos_system.h" />
+		<Unit filename="include/dosbox.h" />
+		<Unit filename="include/fpu.h" />
+		<Unit filename="include/hardware.h" />
+		<Unit filename="include/inout.h" />
+		<Unit filename="include/ipx.h" />
+		<Unit filename="include/ipxserver.h" />
+		<Unit filename="include/joystick.h" />
+		<Unit filename="include/keyboard.h" />
+		<Unit filename="include/logging.h" />
+		<Unit filename="include/mapper.h" />
+		<Unit filename="include/mem.h" />
+		<Unit filename="include/mixer.h" />
+		<Unit filename="include/modules.h" />
+		<Unit filename="include/mouse.h" />
+		<Unit filename="include/paging.h" />
+		<Unit filename="include/pic.h" />
+		<Unit filename="include/programs.h" />
+		<Unit filename="include/regs.h" />
+		<Unit filename="include/render.h" />
+		<Unit filename="include/serialport.h" />
+		<Unit filename="include/setup.h" />
+		<Unit filename="include/shell.h" />
+		<Unit filename="include/support.h" />
+		<Unit filename="include/timer.h" />
+		<Unit filename="include/vga.h" />
+		<Unit filename="include/video.h" />
+		<Unit filename="src/cpu/callback.cpp" />
+		<Unit filename="src/cpu/core_dyn_x86.cpp" />
+		<Unit filename="src/cpu/core_dyn_x86/cache.h" />
+		<Unit filename="src/cpu/core_dyn_x86/decoder.h" />
+		<Unit filename="src/cpu/core_dyn_x86/dyn_fpu.h" />
+		<Unit filename="src/cpu/core_dyn_x86/dyn_fpu_dh.h" />
+		<Unit filename="src/cpu/core_dyn_x86/helpers.h" />
+		<Unit filename="src/cpu/core_dyn_x86/risc_x86.h" />
+		<Unit filename="src/cpu/core_dyn_x86/string.h" />
+		<Unit filename="src/cpu/core_dynrec.cpp" />
+		<Unit filename="src/cpu/core_dynrec/cache.h" />
+		<Unit filename="src/cpu/core_dynrec/decoder.h" />
+		<Unit filename="src/cpu/core_dynrec/decoder_basic.h" />
+		<Unit filename="src/cpu/core_dynrec/decoder_opcodes.h" />
+		<Unit filename="src/cpu/core_dynrec/dyn_fpu.h" />
+		<Unit filename="src/cpu/core_dynrec/operators.h" />
+		<Unit filename="src/cpu/core_dynrec/risc_armv4le-common.h" />
+		<Unit filename="src/cpu/core_dynrec/risc_armv4le-o3.h" />
+		<Unit filename="src/cpu/core_dynrec/risc_armv4le-s3.h" />
+		<Unit filename="src/cpu/core_dynrec/risc_armv4le-thumb-iw.h" />
+		<Unit filename="src/cpu/core_dynrec/risc_armv4le-thumb-niw.h" />
+		<Unit filename="src/cpu/core_dynrec/risc_armv4le-thumb.h" />
+		<Unit filename="src/cpu/core_dynrec/risc_armv4le.h" />
+		<Unit filename="src/cpu/core_dynrec/risc_mipsel32.h" />
+		<Unit filename="src/cpu/core_dynrec/risc_x64.h" />
+		<Unit filename="src/cpu/core_dynrec/risc_x86.h" />
+		<Unit filename="src/cpu/core_full.cpp" />
+		<Unit filename="src/cpu/core_full/ea_lookup.h" />
+		<Unit filename="src/cpu/core_full/load.h" />
+		<Unit filename="src/cpu/core_full/loadwrite.h" />
+		<Unit filename="src/cpu/core_full/op.h" />
+		<Unit filename="src/cpu/core_full/optable.h" />
+		<Unit filename="src/cpu/core_full/save.h" />
+		<Unit filename="src/cpu/core_full/string.h" />
+		<Unit filename="src/cpu/core_full/support.h" />
+		<Unit filename="src/cpu/core_normal.cpp" />
+		<Unit filename="src/cpu/core_normal/helpers.h" />
+		<Unit filename="src/cpu/core_normal/prefix_0f.h" />
+		<Unit filename="src/cpu/core_normal/prefix_66.h" />
+		<Unit filename="src/cpu/core_normal/prefix_66_0f.h" />
+		<Unit filename="src/cpu/core_normal/prefix_none.h" />
+		<Unit filename="src/cpu/core_normal/string.h" />
+		<Unit filename="src/cpu/core_normal/support.h" />
+		<Unit filename="src/cpu/core_normal/table_ea.h" />
+		<Unit filename="src/cpu/core_prefetch.cpp" />
+		<Unit filename="src/cpu/core_simple.cpp" />
+		<Unit filename="src/cpu/cpu.cpp" />
+		<Unit filename="src/cpu/flags.cpp" />
+		<Unit filename="src/cpu/instructions.h" />
+		<Unit filename="src/cpu/lazyflags.h" />
+		<Unit filename="src/cpu/modrm.cpp" />
+		<Unit filename="src/cpu/modrm.h" />
+		<Unit filename="src/cpu/paging.cpp" />
+		<Unit filename="src/debug/debug.cpp" />
+		<Unit filename="src/debug/debug_disasm.cpp" />
+		<Unit filename="src/debug/debug_gui.cpp" />
+		<Unit filename="src/debug/debug_inc.h" />
+		<Unit filename="src/debug/debug_win32.cpp" />
+		<Unit filename="src/debug/disasm_tables.h" />
+		<Unit filename="src/dos/cdrom.cpp" />
+		<Unit filename="src/dos/cdrom.h" />
+		<Unit filename="src/dos/cdrom_aspi_win32.cpp" />
+		<Unit filename="src/dos/cdrom_image.cpp" />
+		<Unit filename="src/dos/cdrom_ioctl_linux.cpp" />
+		<Unit filename="src/dos/cdrom_ioctl_os2.cpp" />
+		<Unit filename="src/dos/cdrom_ioctl_win32.cpp" />
+		<Unit filename="src/dos/dev_con.h" />
+		<Unit filename="src/dos/dos.cpp" />
+		<Unit filename="src/dos/dos_classes.cpp" />
+		<Unit filename="src/dos/dos_codepages.h" />
+		<Unit filename="src/dos/dos_devices.cpp" />
+		<Unit filename="src/dos/dos_execute.cpp" />
+		<Unit filename="src/dos/dos_files.cpp" />
+		<Unit filename="src/dos/dos_ioctl.cpp" />
+		<Unit filename="src/dos/dos_keyboard_layout.cpp" />
+		<Unit filename="src/dos/dos_keyboard_layout_data.h" />
+		<Unit filename="src/dos/dos_memory.cpp" />
+		<Unit filename="src/dos/dos_misc.cpp" />
+		<Unit filename="src/dos/dos_mscdex.cpp" />
+		<Unit filename="src/dos/dos_programs.cpp" />
+		<Unit filename="src/dos/dos_tables.cpp" />
+		<Unit filename="src/dos/drive_cache.cpp" />
+		<Unit filename="src/dos/drive_fat.cpp" />
+		<Unit filename="src/dos/drive_iso.cpp" />
+		<Unit filename="src/dos/drive_local.cpp" />
+		<Unit filename="src/dos/drive_virtual.cpp" />
+		<Unit filename="src/dos/drives.cpp" />
+		<Unit filename="src/dos/drives.h" />
+		<Unit filename="src/dos/scsidefs.h" />
+		<Unit filename="src/dos/wnaspi32.h" />
+		<Unit filename="src/dosbox.cpp" />
+		<Unit filename="src/fpu/fpu.cpp" />
+		<Unit filename="src/fpu/fpu_instructions.h" />
+		<Unit filename="src/fpu/fpu_instructions_x86.h" />
+		<Unit filename="src/gui/dosbox_logo.h" />
+		<Unit filename="src/gui/dosbox_splash.h" />
+		<Unit filename="src/gui/midi.cpp" />
+		<Unit filename="src/gui/midi_alsa.h" />
+		<Unit filename="src/gui/midi_coreaudio.h" />
+		<Unit filename="src/gui/midi_coremidi.h" />
+		<Unit filename="src/gui/midi_mt32.cpp" />
+		<Unit filename="src/gui/midi_mt32.h" />
+		<Unit filename="src/gui/midi_oss.h" />
+		<Unit filename="src/gui/midi_win32.h" />
+		<Unit filename="src/gui/render.cpp" />
+		<Unit filename="src/gui/render_loops.h" />
+		<Unit filename="src/gui/render_scalers.h" />
+		<Unit filename="src/gui/render_simple.h" />
+		<Unit filename="src/gui/render_templates.h" />
+		<Unit filename="src/gui/render_templates_hq.h" />
+		<Unit filename="src/gui/render_templates_hq2x.h" />
+		<Unit filename="src/gui/render_templates_hq3x.h" />
+		<Unit filename="src/gui/render_templates_sai.h" />
+		<Unit filename="src/gui/sdl_gui.cpp" />
+		<Unit filename="src/gui/sdl_mapper.cpp" />
+		<Unit filename="src/gui/sdlmain.cpp" />
+		<Unit filename="src/hardware/adlib.cpp" />
+		<Unit filename="src/hardware/adlib.h" />
+		<Unit filename="src/hardware/cmos.cpp" />
+		<Unit filename="src/hardware/dbopl.cpp" />
+		<Unit filename="src/hardware/dbopl.h" />
+		<Unit filename="src/hardware/disney.cpp" />
+		<Unit filename="src/hardware/dma.cpp" />
+		<Unit filename="src/hardware/gameblaster.cpp" />
+		<Unit filename="src/hardware/gus.cpp" />
+		<Unit filename="src/hardware/hardware.cpp" />
+		<Unit filename="src/hardware/iohandler.cpp" />
+		<Unit filename="src/hardware/ipx.cpp" />
+		<Unit filename="src/hardware/ipxserver.cpp" />
+		<Unit filename="src/hardware/joystick.cpp" />
+		<Unit filename="src/hardware/keyboard.cpp" />
+		<Unit filename="src/hardware/memory.cpp" />
+		<Unit filename="src/hardware/mixer.cpp" />
+		<Unit filename="src/hardware/mpu401.cpp" />
+		<Unit filename="src/hardware/opl.cpp" />
+		<Unit filename="src/hardware/opl.h" />
+		<Unit filename="src/hardware/pcspeaker.cpp" />
+		<Unit filename="src/hardware/pic.cpp" />
+		<Unit filename="src/hardware/sblaster.cpp" />
+		<Unit filename="src/hardware/serialport/directserial.cpp" />
+		<Unit filename="src/hardware/serialport/directserial.h" />
+		<Unit filename="src/hardware/serialport/libserial.cpp" />
+		<Unit filename="src/hardware/serialport/libserial.h" />
+		<Unit filename="src/hardware/serialport/misc_util.cpp" />
+		<Unit filename="src/hardware/serialport/misc_util.h" />
+		<Unit filename="src/hardware/serialport/nullmodem.cpp" />
+		<Unit filename="src/hardware/serialport/nullmodem.h" />
+		<Unit filename="src/hardware/serialport/serialdummy.cpp" />
+		<Unit filename="src/hardware/serialport/serialdummy.h" />
+		<Unit filename="src/hardware/serialport/serialport.cpp" />
+		<Unit filename="src/hardware/serialport/softmodem.cpp" />
+		<Unit filename="src/hardware/serialport/softmodem.h" />
+		<Unit filename="src/hardware/tandy_sound.cpp" />
+		<Unit filename="src/hardware/timer.cpp" />
+		<Unit filename="src/hardware/vga.cpp" />
+		<Unit filename="src/hardware/vga_attr.cpp" />
+		<Unit filename="src/hardware/vga_crtc.cpp" />
+		<Unit filename="src/hardware/vga_dac.cpp" />
+		<Unit filename="src/hardware/vga_draw.cpp" />
+		<Unit filename="src/hardware/vga_gfx.cpp" />
+		<Unit filename="src/hardware/vga_memory.cpp" />
+		<Unit filename="src/hardware/vga_misc.cpp" />
+		<Unit filename="src/hardware/vga_other.cpp" />
+		<Unit filename="src/hardware/vga_paradise.cpp" />
+		<Unit filename="src/hardware/vga_s3.cpp" />
+		<Unit filename="src/hardware/vga_seq.cpp" />
+		<Unit filename="src/hardware/vga_tseng.cpp" />
+		<Unit filename="src/hardware/vga_xga.cpp" />
+		<Unit filename="src/ints/bios.cpp" />
+		<Unit filename="src/ints/bios_disk.cpp" />
+		<Unit filename="src/ints/bios_keyboard.cpp" />
+		<Unit filename="src/ints/ems.cpp" />
+		<Unit filename="src/ints/int10.cpp" />
+		<Unit filename="src/ints/int10.h" />
+		<Unit filename="src/ints/int10_char.cpp" />
+		<Unit filename="src/ints/int10_memory.cpp" />
+		<Unit filename="src/ints/int10_misc.cpp" />
+		<Unit filename="src/ints/int10_modes.cpp" />
+		<Unit filename="src/ints/int10_pal.cpp" />
+		<Unit filename="src/ints/int10_put_pixel.cpp" />
+		<Unit filename="src/ints/int10_vesa.cpp" />
+		<Unit filename="src/ints/int10_video_state.cpp" />
+		<Unit filename="src/ints/int10_vptable.cpp" />
+		<Unit filename="src/ints/mouse.cpp" />
+		<Unit filename="src/ints/xms.cpp" />
+		<Unit filename="src/ints/xms.h" />
+		<Unit filename="src/libs/gui_tk/gui_tk.cpp" />
+		<Unit filename="src/libs/gui_tk/gui_tk.h" />
+		<Unit filename="src/libs/zmbv/zmbv.cpp" />
+		<Unit filename="src/libs/zmbv/zmbv.h" />
+		<Unit filename="src/misc/cross.cpp" />
+		<Unit filename="src/misc/messages.cpp" />
+		<Unit filename="src/misc/programs.cpp" />
+		<Unit filename="src/misc/setup.cpp" />
+		<Unit filename="src/misc/support.cpp" />
+		<Unit filename="src/platform/visualc/config.h" />
+		<Unit filename="src/platform/visualc/ntddcdrm.h" />
+		<Unit filename="src/platform/visualc/ntddscsi.h" />
+		<Unit filename="src/platform/visualc/unistd.h" />
+		<Unit filename="src/shell/shell.cpp" />
+		<Unit filename="src/shell/shell_batch.cpp" />
+		<Unit filename="src/shell/shell_cmds.cpp" />
+		<Unit filename="src/shell/shell_misc.cpp" />
+		<Unit filename="src/winres.rc" />
+		<Extensions>
+			<code_completion />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>
