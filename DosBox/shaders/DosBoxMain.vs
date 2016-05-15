@@ -1,4 +1,4 @@
-#version 120
+#version 100
 
 attribute vec2 position;
 uniform vec2 uvRatio;
@@ -7,7 +7,6 @@ uniform vec2 uvRatio;
 //
 uniform float aspectFix;
 
-// varying vec2 texcoord;
 varying vec2 tcNorm;
 
 // You can always use a hard-coded value instead of the
