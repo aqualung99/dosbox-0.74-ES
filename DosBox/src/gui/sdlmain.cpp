@@ -795,16 +795,16 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 	if (!sdl.active || sdl.updating)
 		return false;
 
-    timespec lastStart = sdl.fpsClockCounter;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &sdl.fpsClockCounter);
-    float milliElapsed = CountMillisecs(&lastStart, &sdl.fpsClockCounter);
-    float fps = 1000.0f / milliElapsed;
+//    timespec lastStart = sdl.fpsClockCounter;
+//    clock_gettime(CLOCK_MONOTONIC_RAW, &sdl.fpsClockCounter);
+//    float milliElapsed = CountMillisecs(&lastStart, &sdl.fpsClockCounter);
+//    float fps = 1000.0f / milliElapsed;
 
-    sg_GFXUpdateCounter++;
-    if (!(sg_GFXUpdateCounter & 0x3F))
-    {
+//    sg_GFXUpdateCounter++;
+//    if (!(sg_GFXUpdateCounter & 0x3F))
+//    {
         // LOG_MSG("%.1f FPS", fps);
-    }
+//    }
 
 	switch (sdl.desktop.type) {
 #if C_OPENGL
@@ -1436,7 +1436,7 @@ static void GUI_StartUp(Section * sec) {
 	CheckGL;
 
     LOG_MSG("OpenGL-ES\nVendor: %s\nRenderer: %s\nVersion: %s\nShader Version: %s", glGetString(GL_VENDOR), glGetString(GL_RENDERER), glGetString(GL_VERSION), glGetString(GL_SHADING_LANGUAGE_VERSION));
-    fprintf(stdout, "Extentions: %s\r\n", glGetString(GL_EXTENSIONS));
+//    fprintf(stdout, "Extentions: %s\r\n", glGetString(GL_EXTENSIONS));
 
 	// We use OpenGL 2.1 prototypes. This is around 2006 - 2007 era of tech,
 	// but at that time only high-end PCs would have graphics cards capable of this.
