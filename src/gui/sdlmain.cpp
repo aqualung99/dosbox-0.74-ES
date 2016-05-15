@@ -790,7 +790,8 @@ float CountMillisecs(timespec *pStart, timespec *pEnd)
     return (float)(nsecsElapsed / 1000000.0);
 }
 
-static unsigned sg_GFXUpdateCounter = 0;
+//static unsigned sg_GFXUpdateCounter = 0;
+
 bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 	if (!sdl.active || sdl.updating)
 		return false;
@@ -1181,18 +1182,16 @@ inline const char *os_separator()
 #endif
 }
 
+#if defined (WIN32)
+static const char* sg_pathToShaders = ".\\";
+#else
+static const char* sg_pathToShaders = "/usr/local/share/dosbox/";
+#endif // defined
+
+
 static GLuint LoadShader(const char *szShaderFile, GLenum shaderType)
 {
-	static const char *pathPrep = "../shaders";
-
-	char *szBuffer = (char*)malloc(strnlen(szShaderFile, 1024) + strlen(pathPrep) + 2);
-	strcpy(szBuffer, pathPrep);
-//	strncat(szBuffer, os_separator(), 1024);
-//	strncat(szBuffer, "shaders", 1024);
-	strncat(szBuffer, os_separator(), 1024);
-	strncat(szBuffer, szShaderFile, 1024);
-
-	FILE *fp = fopen(szBuffer, "r");
+	FILE *fp = fopen(szShaderFile, "r");
 	if (!fp)
 	{
 		//perror(szBuffer);
@@ -1264,7 +1263,6 @@ static GLuint LoadShader(const char *szShaderFile, GLenum shaderType)
 	}
 	free(rgszShaderCodeLine);
 	free(rgLineLengths);
-	free(szBuffer);
 
 	if (compileResult == GL_TRUE)
 	{
@@ -1475,13 +1473,16 @@ static void GUI_StartUp(Section * sec) {
 	sdl.idxBuffer = CreateObjectBuffer(GL_ELEMENT_ARRAY_BUFFER, gc_element_buffer_data, sizeof(gc_element_buffer_data));
 	CheckGL;
 
-#ifdef _SDL_USE_EGL
-	sdl.vsSimple = LoadShader("simple.evs", GL_VERTEX_SHADER);
-	sdl.psSimple = LoadShader("simple.eps", GL_FRAGMENT_SHADER);
-#else
-	sdl.vsSimple = LoadShader("simple.vs", GL_VERTEX_SHADER);
-	sdl.psSimple = LoadShader("simple.ps", GL_FRAGMENT_SHADER);
-#endif // _SDL_USE_EGL
+	char *shaderPathBuf = (char*)alloca(16 * 1024);
+    strcpy(shaderPathBuf, sg_pathToShaders);
+    strcat(shaderPathBuf, "logo.vs");
+
+	sdl.vsSimple = LoadShader(shaderPathBuf, GL_VERTEX_SHADER);
+
+    strcpy(shaderPathBuf, sg_pathToShaders);
+    strcat(shaderPathBuf, "logo.ps");
+
+	sdl.psSimple = LoadShader(shaderPathBuf, GL_FRAGMENT_SHADER);
 	sdl.progSimple = CreateProgram(sdl.vsSimple, sdl.psSimple);
 
     if (sdl.progSimple < 0)
@@ -1489,14 +1490,8 @@ static void GUI_StartUp(Section * sec) {
         exit(-1);
     }
 
-#ifdef _SDL_USE_EGL
-	sdl.vsPalette = LoadShader("pal.evs", GL_VERTEX_SHADER);
-	sdl.psPalette = LoadShader("pal2.eps", GL_FRAGMENT_SHADER);
-#else
-	sdl.vsPalette = LoadShader("pal.vs", GL_VERTEX_SHADER);
-	sdl.psPalette = LoadShader("pal2.ps", GL_FRAGMENT_SHADER);
-#endif // _SDL_USE_EGL
-
+	sdl.vsPalette = LoadShader(section->Get_string("vertex_shader"), GL_VERTEX_SHADER);
+	sdl.psPalette = LoadShader(section->Get_string("pixel_shader"), GL_FRAGMENT_SHADER);
 	sdl.progPalette = CreateProgram(sdl.vsPalette, sdl.psPalette);
 
     if (sdl.progPalette < 0)
@@ -1504,15 +1499,9 @@ static void GUI_StartUp(Section * sec) {
         exit(-1);
     }
 
-#ifdef _SDL_USE_EGL
-	sdl.vsRect = LoadShader("solidRect.evs", GL_VERTEX_SHADER);
-	sdl.psRect = LoadShader("solidRect.eps", GL_FRAGMENT_SHADER);
-#else
-	sdl.vsRect = LoadShader("solidRect.vs", GL_VERTEX_SHADER);
-	sdl.psRect = LoadShader("solidRect.ps", GL_FRAGMENT_SHADER);
-#endif // _SDL_USE_EGL
-
-	sdl.progRect = CreateProgram(sdl.vsPalette, sdl.psPalette);
+//	sdl.vsRect = LoadShader("solidRect.vs", GL_VERTEX_SHADER);
+//	sdl.psRect = LoadShader("solidRect.ps", GL_FRAGMENT_SHADER);
+//	sdl.progRect = CreateProgram(sdl.vsRect, sdl.psRect);
 
 	glGenTextures(1, &sdl.texPalette);
 	CheckGL;
@@ -1626,6 +1615,7 @@ static void GUI_StartUp(Section * sec) {
         sdl.glVertexAttribPointer(sdl.palPositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
         CheckGL;
 
+        /*
         sdl.glUseProgram(sdl.progRect);
         CheckGL;
         sdl.rectPositionAddr = sdl.glGetAttribLocation(sdl.progRect, "position");
@@ -1634,7 +1624,7 @@ static void GUI_StartUp(Section * sec) {
         CheckGL;
 		sdl.glVertexAttribPointer(sdl.rectPositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
 		CheckGL;
-
+        */
 
 		// Now get ready to draw the logo
 		//
@@ -1659,7 +1649,7 @@ static void GUI_StartUp(Section * sec) {
 
 		bool exit_splash = false;
 		float curFadeFactor = 1.0f;
-		static Bitu max_splash_loop = 1001;
+		static Bitu max_splash_loop = 3000;
 		static Bitu splash_fade = 1000;
 		static bool use_fadeout = true;
 
@@ -1982,7 +1972,7 @@ void Config_Add_SDL() {
 		"opengl", "opengles",
 #endif
 		0 };
-	Pstring = sdl_sec->Add_string("output",Property::Changeable::DBoxAlways,"surface");
+	Pstring = sdl_sec->Add_string("output",Property::Changeable::DBoxAlways,"opengles");
 	Pstring->Set_help("What video system to use for output.");
 	Pstring->Set_values(outputs);
 
@@ -2012,8 +2002,23 @@ void Config_Add_SDL() {
 	Pstring = sdl_sec->Add_path("mapperfile",Property::Changeable::DBoxAlways,MAPPERFILE);
 	Pstring->Set_help("File used to load/save the key/event mappings from. Resetmapper only works with the defaul value.");
 
+    char *shaderPathBuf = (char*)alloca(16 * 1024);
+
+    strcpy(shaderPathBuf, sg_pathToShaders);
+    strcat(shaderPathBuf, "DosBoxMain.vs");
+
+    Pstring = sdl_sec->Add_path("vertex_shader", Property::Changeable::OnlyAtStart, shaderPathBuf);
+    Pstring->Set_help("File used as the vertex shader for the main renderer. Should be in the OpenGL-ES Shading Language. You shouldn't need to change this.");
+
+    strcpy(shaderPathBuf, sg_pathToShaders);
+    strcat(shaderPathBuf, "DosBoxMain.ps");
+
+    Pstring = sdl_sec->Add_path("pixel_shader", Property::Changeable::OnlyAtStart, shaderPathBuf);
+    Pstring->Set_help("File used as the fragment shader for the main renderer. Should be in the OpenGL-ES Shading Language. Change this to make it better.");
+/*
 	Pbool = sdl_sec->Add_bool("usescancodes",Property::Changeable::DBoxAlways,true);
 	Pbool->Set_help("Avoid usage of symkeys, might not work on all operating systems.");
+*/
 }
 
 static void show_warning(char const * const message) {

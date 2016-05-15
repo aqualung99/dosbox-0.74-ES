@@ -1,4 +1,4 @@
-AM_CPPFLAGS = -I$(top_srcdir)/include -DJOEL_REMOVED -D_SDL_USE_EGL
+AM_CPPFLAGS = -I$(top_srcdir)/include -DJOEL_REMOVED
 
 noinst_LIBRARIES = libgui.a
 libgui_a_SOURCES = sdlmain.cpp sdl_mapper.cpp dosbox_logo.h \
