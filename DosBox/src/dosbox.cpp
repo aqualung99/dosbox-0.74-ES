@@ -130,6 +130,7 @@ extern float CountMillisecs(timespec *pStart, timespec *pEnd);
 
 static Bitu Normal_Loop(void) {
 	Bits ret;
+/*
 	timespec picRunQueueClockCounter;
 	timespec cpuDecoderClockCounter;
 	timespec gfxEventsClockCounter;
@@ -137,26 +138,26 @@ static Bitu Normal_Loop(void) {
 	timespec handlerClockCounter;
     timespec tmpClockCounter;
     float msPIC = 0, msCPU=0, msCallback=0, msGFX=0, msTick=0;
-
+*/
 	while (1) {
 
-		clock_gettime(CLOCK_MONOTONIC_RAW, &picRunQueueClockCounter);
+//		clock_gettime(CLOCK_MONOTONIC_RAW, &picRunQueueClockCounter);
 
 		if (PIC_RunQueue()) {
 
-            clock_gettime(CLOCK_MONOTONIC_RAW, &tmpClockCounter);
-            msPIC += CountMillisecs(&picRunQueueClockCounter, &tmpClockCounter);
+//            clock_gettime(CLOCK_MONOTONIC_RAW, &tmpClockCounter);
+//            msPIC += CountMillisecs(&picRunQueueClockCounter, &tmpClockCounter);
 
 			ret=(*cpudecoder)();
 
-			clock_gettime(CLOCK_MONOTONIC_RAW, &cpuDecoderClockCounter);
-			msCPU += CountMillisecs(&tmpClockCounter, &cpuDecoderClockCounter);
+//			clock_gettime(CLOCK_MONOTONIC_RAW, &cpuDecoderClockCounter);
+//			msCPU += CountMillisecs(&tmpClockCounter, &cpuDecoderClockCounter);
 
 			if (GCC_UNLIKELY(ret<0)) return 1;
 			if (ret>0) {
 				Bitu blah=(*CallBack_Handlers[ret])();
-				clock_gettime(CLOCK_MONOTONIC_RAW, &handlerClockCounter);
-				msCallback += CountMillisecs(&cpuDecoderClockCounter, &handlerClockCounter);
+//				clock_gettime(CLOCK_MONOTONIC_RAW, &handlerClockCounter);
+//				msCallback += CountMillisecs(&cpuDecoderClockCounter, &handlerClockCounter);
 
 				if (GCC_UNLIKELY(blah)) return blah;
 			}
@@ -164,19 +165,19 @@ static Bitu Normal_Loop(void) {
 			if (DEBUG_ExitLoop()) return 0;
 #endif
 		} else {
-            clock_gettime(CLOCK_MONOTONIC_RAW, &tmpClockCounter);
-            msPIC += CountMillisecs(&picRunQueueClockCounter, &tmpClockCounter);
+//            clock_gettime(CLOCK_MONOTONIC_RAW, &tmpClockCounter);
+//            msPIC += CountMillisecs(&picRunQueueClockCounter, &tmpClockCounter);
 
 			GFX_Events();
 
-			clock_gettime(CLOCK_MONOTONIC_RAW, &gfxEventsClockCounter);
-			msGFX += CountMillisecs(&tmpClockCounter, &gfxEventsClockCounter);
+//			clock_gettime(CLOCK_MONOTONIC_RAW, &gfxEventsClockCounter);
+//			msGFX += CountMillisecs(&tmpClockCounter, &gfxEventsClockCounter);
 
 			if (ticksRemain>0) {
 				TIMER_AddTick();
 
-				clock_gettime(CLOCK_MONOTONIC_RAW, &timerTickClockCounter);
-				msTick += CountMillisecs(&gfxEventsClockCounter, &timerTickClockCounter);
+//				clock_gettime(CLOCK_MONOTONIC_RAW, &timerTickClockCounter);
+//				msTick += CountMillisecs(&gfxEventsClockCounter, &timerTickClockCounter);
 
 				ticksRemain--;
 			} else goto increaseticks;
