@@ -227,6 +227,14 @@ struct SDL_Block {
 	PFNGLACTIVETEXTUREPROC glActiveTexture;
 	PFNGLGETACTIVEATTRIBPROC glGetActiveAttrib;
 	PFNGLGETACTIVEUNIFORMPROC glGetActiveUniform;
+	PFNGLGENRENDERBUFFERSPROC glGenRenderBuffers;
+	PFNGLBINDRENDERBUFFERPROC glBindRenderBuffer;
+	PFNGLDELETERENDERBUFFERSPROC glDeleteRenderBuffers;
+	PFNGLGENFRAMEBUFFERSPROC glGenFramebuffers;
+	PFNGLDELETEFRAMEBUFFERSPROC glDeleteFramebuffers;
+	PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer;
+	PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
+	PFNGLCHECKFRAMEBUFFERSTATUSPROC glCheckFramebufferStatus;
 
 	GLuint vsSimple;
 	GLuint psSimple;
@@ -239,6 +247,10 @@ struct SDL_Block {
     GLuint vsRect;
     GLuint psRect;
     GLuint progRect;
+
+    GLuint vsFB;
+    GLuint psFB;
+    GLuint progFB;
 
 	GLuint vertBuffer;
 	GLuint idxBuffer;
@@ -259,7 +271,19 @@ struct SDL_Block {
 	GLint rectPositionAddr;
 	GLint rectSolidColorAddr;
 
+	GLint fbPositionAddr;
+	GLint fbTexcoordScaleAddr;
+	GLint fbTexUnitAddr;
+
 	GLuint texPalette;
+    GLuint texBackbuffer;
+
+    GLint originalBackbufferBinding;
+    GLuint fboBackbuffer;
+
+    bool bSmooth2Pass;
+
+    int fboWidth, fboHeight;
 
 	float windowAspectFor4x3;
 	unsigned nextRenderLineNum;
@@ -310,6 +334,12 @@ static void DeleteObjectBuffer(GLuint buffer)
     sdl.glDeleteBuffers(1, &buffer);
 }
 
+static int int_log2 (int val) {
+    int log = 0;
+    while ((val >>= 1) != 0)
+	log++;
+    return log;
+}
 
 
 /* static variable to show wether there is not a valid stdout.
@@ -337,6 +367,83 @@ static void GFX_AwaitKeypress(void)
 		fgets(inputBuffer, 1024, stdin);
 	}
 }
+
+
+static void GFX_RebuildFramebufferTexture()
+{
+    sdl.glBindFramebuffer(GL_FRAMEBUFFER, sdl.originalBackbufferBinding);
+
+    if (sdl.fboBackbuffer != -1)
+    {
+        sdl.glDeleteFramebuffers(1, &sdl.fboBackbuffer);
+        CheckGL;
+        sdl.fboBackbuffer = -1;
+    }
+    if (sdl.texBackbuffer != -1)
+    {
+        glDeleteTextures(1, &sdl.texBackbuffer);
+        CheckGL;
+        sdl.texBackbuffer = -1;
+    }
+
+    glGenTextures(1, &sdl.texBackbuffer);
+    CheckGL;
+
+    sdl.fboWidth = 2 << int_log2(sdl.clip.w);
+    sdl.fboHeight = 2 << int_log2(sdl.clip.h);
+
+    sdl.glActiveTexture(GL_TEXTURE0);
+    CheckGL;
+
+    // Regenerate the texture backing for the new
+    // framebuffer
+    //
+    glBindTexture(GL_TEXTURE_2D, sdl.texBackbuffer);
+    CheckGL;
+
+    // Set parameters on the texture backing
+    //
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, sdl.fboWidth, sdl.fboHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    CheckGL;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    CheckGL;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    CheckGL;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
+    CheckGL;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
+    CheckGL;
+
+    // Generate a new framebuffer host
+    //
+    sdl.glGenFramebuffers(1, &sdl.fboBackbuffer);
+    CheckGL;
+
+    sdl.glBindFramebuffer(GL_FRAMEBUFFER, sdl.fboBackbuffer);
+    CheckGL;
+
+    // Attach the texture backing to the framebuffer host
+    //
+    sdl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sdl.texBackbuffer, 0);
+    CheckGL;
+
+    GLenum fboStat = sdl.glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (fboStat != GL_FRAMEBUFFER_COMPLETE)
+    {
+        LOG_MSG("Warning: Framebuffer object incomplete! (%d)", fboStat);
+    }
+
+    glViewport(0,0, sdl.clip.w, sdl.clip.h);
+    CheckGL;
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    CheckGL;
+    glClear(GL_COLOR_BUFFER_BIT);
+    CheckGL;
+
+    sdl.glBindFramebuffer(GL_FRAMEBUFFER, sdl.originalBackbufferBinding);
+    CheckGL;
+}
+
 
 struct DrawRectData
 {
@@ -513,13 +620,6 @@ void GFX_ResetScreen(void) {
 	CPU_Reset_AutoAdjust();
 }
 
-static int int_log2 (int val) {
-    int log = 0;
-    while ((val >>= 1) != 0)
-	log++;
-    return log;
-}
-
 static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 	Bit16u fixedWidth;
 	Bit16u fixedHeight;
@@ -545,12 +645,6 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 		}
 		if (sdl.desktop.fullscreen)
 		{
-/*
-			sdl.window = SDL_CreateWindow("DOSBox",
-										  SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-										  fixedWidth, fixedHeight,
-										  sdl_flags | SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS);
-*/
 			SDL_SetWindowBordered(sdl.window, SDL_FALSE);
 			SDL_SetWindowSize(sdl.window, fixedWidth, fixedHeight);
 			SDL_SetWindowFullscreen(sdl.window, SDL_WINDOW_FULLSCREEN);
@@ -559,26 +653,14 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 			sdl.windowAspectFor4x3 = (4.0f / 3.0f) / ((float)fixedWidth / fixedHeight);
 		}
 		else
-/*
-			if (sdl.window == NULL)
-			{
-				sdl.window = SDL_CreateWindow("DOSBox",
-											  SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-											  fixedWidth, fixedHeight,
-											  sdl_flags);
-				sdl.clip.w = fixedWidth;
-				sdl.clip.h = fixedHeight;
-			}
-			else
-*/
-			{
-				SDL_SetWindowFullscreen(sdl.window, 0);
-				SDL_SetWindowBordered(sdl.window, SDL_TRUE);
-				SDL_SetWindowSize(sdl.window, fixedWidth, fixedHeight);
-				sdl.clip.w = fixedWidth;
-				sdl.clip.h = fixedHeight;
-				sdl.windowAspectFor4x3 = (4.0f / 3.0f) / ((float)fixedWidth / fixedHeight);
-			}
+		{
+            SDL_SetWindowFullscreen(sdl.window, 0);
+            SDL_SetWindowBordered(sdl.window, SDL_TRUE);
+            SDL_SetWindowSize(sdl.window, fixedWidth, fixedHeight);
+            sdl.clip.w = fixedWidth;
+            sdl.clip.h = fixedHeight;
+            sdl.windowAspectFor4x3 = (4.0f / 3.0f) / ((float)fixedWidth / fixedHeight);
+		}
 
 		if (sdl.window)
 		{
@@ -598,26 +680,23 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 			sdl.clip.x = 0;
 			sdl.clip.y = 0;
 		}
-		return sdl.window;
 	} else {
 		sdl.clip.x=0;sdl.clip.y=0;
 		sdl.clip.w=(Bit16u)(sdl.draw.width*sdl.draw.scalex);
 		sdl.clip.h=(Bit16u)(sdl.draw.height*sdl.draw.scaley);
 		sdl.windowAspectFor4x3 = (4.0f / 3.0f) / ((float)sdl.clip.w / sdl.clip.h);
 
-/*
-		if (sdl.window == NULL)
-		{
-			sdl.window = SDL_CreateWindow("DOSBox", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, sdl.clip.w, sdl.clip.h, SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL);
-		}
-		else
-*/
-		{
-			SDL_SetWindowSize(sdl.window, sdl.clip.w, sdl.clip.h);
-		}
-		return sdl.window;
+		SDL_SetWindowSize(sdl.window, sdl.clip.w, sdl.clip.h);
 	}
+
+	if (sdl.bSmooth2Pass)
+	{
+        GFX_RebuildFramebufferTexture();
+	}
+
+    return sdl.window;
 }
+
 
 Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,GFX_CallBack_t callback) {
 	if (sdl.updating)
@@ -654,9 +733,8 @@ dosurface:
 			goto dosurface;
 		}
 		SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
-#if defined (WIN32) && SDL_VERSION_ATLEAST(1, 2, 11)
-		SDL_GL_SetSwapInterval(1);
-#endif
+
+        SDL_GL_SetSwapInterval(1);
 
 		GFX_SetupSurfaceScaled(0,0);
 		if ( (sdl.window == NULL) || SDL_BITSPERPIXEL(SDL_GetWindowPixelFormat(sdl.window)) < 15) {
@@ -822,10 +900,21 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 
 		SDL_GL_SwapWindow(sdl.window);
 
+        if (sdl.bSmooth2Pass)
+        {
+            // Switch back to the texture render target
+            //
+            sdl.glBindFramebuffer(GL_FRAMEBUFFER, sdl.fboBackbuffer);
+            CheckGL;
+            glViewport(0,0, sdl.clip.w, sdl.clip.h);
+            CheckGL;
+        }
+
 		sdl.glActiveTexture(GL_TEXTURE0);
 		CheckGL;
 		glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
 		CheckGL;
+
 		return true;
 #endif
 	default:
@@ -895,12 +984,20 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 			sdl.glActiveTexture(GL_TEXTURE0);
 			CheckGL;
             glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
-			CheckGL;
+            CheckGL;
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            CheckGL;
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            CheckGL;
 
 			sdl.glActiveTexture(GL_TEXTURE1);
 			CheckGL;
 			glBindTexture(GL_TEXTURE_2D, sdl.texPalette);
 			CheckGL;
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            CheckGL;
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            CheckGL;
 
 			sdl.glUseProgram(sdl.progPalette);
 			CheckGL;
@@ -915,6 +1012,9 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 			sdl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sdl.idxBuffer);
 			CheckGL;
 
+			// Render from our two textures (the bitmap & palette)
+			// onto the current Framebuffer
+			//
 			sdl.glEnableVertexAttribArray(sdl.palPositionAddr);
 			CheckGL;
 			glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
@@ -922,7 +1022,48 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 			sdl.glDisableVertexAttribArray(sdl.palPositionAddr);
 			CheckGL;
 
+            // Draw debug rects
+            //
             GFX_DrawAllRectBuffers();
+
+            if (sdl.bSmooth2Pass)
+            {
+                // Now switch the framebuffer back to the default one, and blit
+                // our rendered texture
+                //
+                sdl.glBindFramebuffer(GL_FRAMEBUFFER, sdl.originalBackbufferBinding);
+                CheckGL;
+                glViewport(0,0, sdl.clip.w, sdl.clip.h);
+                CheckGL;
+
+                sdl.glActiveTexture(GL_TEXTURE0);
+                CheckGL;
+                glBindTexture(GL_TEXTURE_2D, sdl.texBackbuffer);
+                CheckGL;
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                CheckGL;
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                CheckGL;
+
+                sdl.glUseProgram(sdl.progFB);
+                CheckGL;
+                sdl.glUniform1i(sdl.fbTexUnitAddr, 0);
+                CheckGL;
+                sdl.glUniform2f(sdl.fbTexcoordScaleAddr, (GLfloat)sdl.clip.w / sdl.fboWidth, (GLfloat)sdl.clip.h / sdl.fboHeight);
+                CheckGL;
+
+                sdl.glBindBuffer(GL_ARRAY_BUFFER, sdl.vertBuffer);
+                CheckGL;
+                sdl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sdl.idxBuffer);
+                CheckGL;
+
+                sdl.glEnableVertexAttribArray(sdl.fbPositionAddr);
+                CheckGL;
+                glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
+                CheckGL;
+                sdl.glDisableVertexAttribArray(sdl.fbPositionAddr);
+                CheckGL;
+            }
 
 			//SDL_GL_SwapWindow(sdl.window);
 		break;
@@ -1397,7 +1538,7 @@ static void GUI_StartUp(Section * sec) {
 	sdl.opengl.bilinear=true;
 
 	clock_getres(CLOCK_MONOTONIC_RAW, &sdl.clockRes);
-    LOG_MSG("Clock resolution is %d seconds, %d nanoseconds", sdl.clockRes.tv_sec, sdl.clockRes.tv_nsec);
+    LOG_MSG("Clock resolution is %d seconds, %d nanoseconds", int(sdl.clockRes.tv_sec), int(sdl.clockRes.tv_nsec));
 
 #if C_OPENGL
    if(sdl.desktop.want_type==SCREEN_OPENGL){ /* OPENGL is requested */
@@ -1467,6 +1608,14 @@ static void GUI_StartUp(Section * sec) {
 	sdl.glActiveTexture = (PFNGLACTIVETEXTUREPROC)SDL_GL_GetProcAddress("glActiveTexture");
 	sdl.glGetActiveAttrib = (PFNGLGETACTIVEATTRIBPROC)SDL_GL_GetProcAddress("glGetActiveAttrib");
 	sdl.glGetActiveUniform = (PFNGLGETACTIVEUNIFORMPROC)SDL_GL_GetProcAddress("glGetActiveUniform");
+//	sdl.glGenRenderBuffers = (PFNGLGENRENDERBUFFERSPROC)SDL_GL_GetProcAddress("glGenRenderBuffers");
+//	sdl.glBindRenderBuffer = (PFNGLBINDRENDERBUFFERPROC)SDL_GL_GetProcAddress("glBindRenderBuffer");
+//	sdl.glDeleteRenderBuffers = (PFNGLDELETERENDERBUFFERSPROC)SDL_GL_GetProcAddress("glDeleteRenderBuffers");
+    sdl.glGenFramebuffers = (PFNGLGENFRAMEBUFFERSPROC)SDL_GL_GetProcAddress("glGenFramebuffers");
+    sdl.glDeleteFramebuffers = (PFNGLDELETEFRAMEBUFFERSPROC)SDL_GL_GetProcAddress("glDeleteFramebuffers");
+    sdl.glBindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC)SDL_GL_GetProcAddress("glBindFramebuffer");
+    sdl.glFramebufferTexture2D = (PFNGLFRAMEBUFFERTEXTURE2DPROC)SDL_GL_GetProcAddress("glFramebufferTexture2D");
+    sdl.glCheckFramebufferStatus = (PFNGLCHECKFRAMEBUFFERSTATUSPROC)SDL_GL_GetProcAddress("glCheckFramebufferStatus");
 
 	sdl.vertBuffer = CreateObjectBuffer(GL_ARRAY_BUFFER, gc_vertex_buffer_data, sizeof(gc_vertex_buffer_data));
 	CheckGL;
@@ -1487,7 +1636,7 @@ static void GUI_StartUp(Section * sec) {
 
     if (sdl.progSimple < 0)
     {
-        exit(-1);
+        throw 0;
     }
 
 	sdl.vsPalette = LoadShader(section->Get_string("vertex_shader"), GL_VERTEX_SHADER);
@@ -1496,12 +1645,26 @@ static void GUI_StartUp(Section * sec) {
 
     if (sdl.progPalette < 0)
     {
-        exit(-1);
+        throw 0;
     }
 
 //	sdl.vsRect = LoadShader("solidRect.vs", GL_VERTEX_SHADER);
 //	sdl.psRect = LoadShader("solidRect.ps", GL_FRAGMENT_SHADER);
 //	sdl.progRect = CreateProgram(sdl.vsRect, sdl.psRect);
+
+    strcpy(shaderPathBuf, sg_pathToShaders);
+    strcat(shaderPathBuf, "fb.vs");
+    sdl.vsFB = LoadShader(shaderPathBuf, GL_VERTEX_SHADER);
+
+    strcpy(shaderPathBuf, sg_pathToShaders);
+    strcat(shaderPathBuf, "fb.ps");
+    sdl.psFB = LoadShader(shaderPathBuf, GL_FRAGMENT_SHADER);
+    sdl.progFB = CreateProgram(sdl.vsFB, sdl.psFB);
+
+    if (sdl.progFB < 0)
+    {
+        throw 0;
+    }
 
 	glGenTextures(1, &sdl.texPalette);
 	CheckGL;
@@ -1522,6 +1685,15 @@ static void GUI_StartUp(Section * sec) {
 	CheckGL;
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
 	CheckGL;
+
+    sdl.texBackbuffer = -1;
+    sdl.fboBackbuffer = -1;
+    sdl.bSmooth2Pass = section->Get_bool("smooth_2pass");
+    if (sdl.bSmooth2Pass)
+    {
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &sdl.originalBackbufferBinding);
+        CheckGL;
+    }
 
 	const char * gl_ext = (const char *)glGetString (GL_EXTENSIONS);
 	if(gl_ext && *gl_ext)
@@ -1625,6 +1797,18 @@ static void GUI_StartUp(Section * sec) {
 		sdl.glVertexAttribPointer(sdl.rectPositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
 		CheckGL;
         */
+        sdl.glUseProgram(sdl.progFB);
+        CheckGL;
+
+        sdl.fbPositionAddr = sdl.glGetAttribLocation(sdl.progFB, "position");
+        CheckGL;
+        sdl.fbTexcoordScaleAddr = sdl.glGetUniformLocation(sdl.progFB, "texcoordScale");
+        CheckGL;
+        sdl.fbTexUnitAddr = sdl.glGetUniformLocation(sdl.progFB, "texUnit");
+        CheckGL;
+
+        sdl.glVertexAttribPointer(sdl.fbPositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
+        CheckGL;
 
 		// Now get ready to draw the logo
 		//
@@ -2015,6 +2199,10 @@ void Config_Add_SDL() {
 
     Pstring = sdl_sec->Add_path("pixel_shader", Property::Changeable::OnlyAtStart, shaderPathBuf);
     Pstring->Set_help("File used as the fragment shader for the main renderer. Should be in the OpenGL-ES Shading Language. Change this to make it better.");
+
+    Pbool = sdl_sec->Add_bool("smooth_2pass", Property::Changeable::OnlyAtStart, false);
+    Pbool->Set_help("Instead of rendering the native image directly to the framebuffer, render to a texture first. Then use bilinear interpolation to render that texture to the screen. If you aren't using a CRT shader, you probably want to set this to true. If you are using a CRT shader, you probably want to set this to false.");
+
 /*
 	Pbool = sdl_sec->Add_bool("usescancodes",Property::Changeable::DBoxAlways,true);
 	Pbool->Set_help("Avoid usage of symkeys, might not work on all operating systems.");
@@ -2028,7 +2216,7 @@ static void show_warning(char const * const message) {
 	if ( !sdl.inited && SDL_Init(SDL_INIT_VIDEO|SDL_INIT_NOPARACHUTE) < 0 ) textonly = true;
 	sdl.inited = true;
 #endif
-	printf(message);
+	puts(message);
 	if(textonly) return;
 #if SDL_BYTEORDER == SDL_BIG_ENDIAN
 	Bit32u rmask = 0xff000000;
