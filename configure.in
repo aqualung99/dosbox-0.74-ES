@@ -416,7 +416,7 @@ esac
 fi
 
 AC_LANG_PUSH([C++])
-AH_TEMPLATE(C_MT32EMU, [Define to 1 to enable MT-32 support])
+AH_TEMPLATE(C_MT32EMU, [Define to 1 to enable Roland MT-32 emulation support])
 dnl AC_CHECK_LIB(mt32emu, main, have_munt_lib=yes , have_munt_lib=no , )
 AC_CHECK_HEADER([mt32emu/mt32emu.h], have_munt_header=yes , have_munt_header=no , AC_INCLUDES_DEFAULT)
 AC_MSG_CHECKING(whether MT32 emulation will be enabled)
@@ -426,6 +426,16 @@ if test x$have_munt_header = xyes ; then
     AC_MSG_RESULT(yes)
 fi
 AC_LANG_POP([C++])
+
+AH_TEMPLATE(C_FLUIDSYNTH, [Define to 1 enable FluidSynth MIDI Synthesizer suppoer])
+AC_CHECK_LIB(fluidsynth, new_fluid_synth, have_fluid_lib=yes, have_fluid_lib=no , )
+AC_CHECK_HEADER([fluidsynth.h], have_fluid_header=yes, have_fluid_header=no, AC_INCLUDES_DEFAULT)
+AC_MSG_CHECKING(whether FluidSynth MIDI synthesizer will be enabled)
+if test x$have_fluid_header=yes -a x$have_fluid_lib=yes ; then
+	AC_MSG_RESULT(yes)
+	LIBS="$LIBS -lfluidsynth"
+	AC_DEFINE([C_FLUIDSYNTH], [], [Enable built-in FluidSynth MIDI Synthesis])
+fi
 
 AH_TEMPLATE(C_SDL_SOUND,[Define to 1 to enable SDL_sound support])
 AC_CHECK_HEADER(SDL/SDL_sound.h,have_SDL_sound_h=yes,)
