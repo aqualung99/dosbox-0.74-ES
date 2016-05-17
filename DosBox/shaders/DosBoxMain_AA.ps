@@ -1,0 +1,45 @@
+#version 100
+
+precision highp float;
+precision mediump int;
+
+uniform highp sampler2D texUnit;
+uniform vec4 sourceSize;
+uniform highp sampler2D palUnit;
+uniform vec2 one;
+uniform vec2 uvRatio;
+
+varying vec2 tcNorm;
+
+
+#define SAMPLE_WIDTH	1.0
+
+
+// PAL() takes an 8-bit value as a U texture coordinate and does
+// a lookup into the palette texture to return RGB values for that index
+// 
+#define PAL(p)	 			texture2D(palUnit, vec2((p),0.5))
+#define LOOKUP(c)			PAL(texture2D(texUnit, (c) * uvRatio).x)
+
+
+void main() {
+
+	vec2 texelPos = (tcNorm * sourceSize.xy) - vec2(0.5);
+
+//	vec2 texelPosFrac = fract(texelPos);
+	vec2 halfPixel = one * vec2(SAMPLE_WIDTH);
+
+	vec3 texel00 = LOOKUP(tcNorm).xyz;
+	vec3 texel10 = LOOKUP(tcNorm + vec2( halfPixel.x,   0)).xyz;
+	vec3 texel01 = LOOKUP(tcNorm + vec2( 0,            halfPixel.y)).xyz;
+	vec3 texeln10 = LOOKUP(tcNorm - vec2( halfPixel.x,   0)).xyz;
+	vec3 texeln01 = LOOKUP(tcNorm - vec2( 0,            halfPixel.y)).xyz;
+
+	vec3 blend1 = mix(texel01, texeln01, 0.5);
+	vec3 blend2 = mix(texel10, texeln10, 0.5);
+	vec3 blend3 = mix(blend1, blend2, 0.5);
+	vec3 blend4 = mix(texel00, blend3, 0.5);
+	
+	gl_FragColor.xyz = blend4;
+	gl_FragColor.w = 1.0;
+}
