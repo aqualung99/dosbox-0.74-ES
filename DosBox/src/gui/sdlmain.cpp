@@ -359,12 +359,12 @@ static void GFX_AwaitKeypress(void)
 {
 	bool bKeyFound = false;
 
-	LOG_MSG("Press enter key to quit...");
+	// LOG_MSG("Press enter key to quit...");
 	char inputBuffer[1024];
 
 	if (!no_stdout)
 	{
-		fgets(inputBuffer, 1024, stdin);
+		char *szRemoveWarning = fgets(inputBuffer, 1024, stdin);
 	}
 }
 
@@ -389,8 +389,10 @@ static void GFX_RebuildFramebufferTexture()
     glGenTextures(1, &sdl.texBackbuffer);
     CheckGL;
 
-    sdl.fboWidth = 2 << int_log2(sdl.clip.w);
-    sdl.fboHeight = 2 << int_log2(sdl.clip.h);
+//    sdl.fboWidth = 2 << int_log2(sdl.clip.w);
+//    sdl.fboHeight = 2 << int_log2(sdl.clip.h);
+    sdl.fboWidth = sdl.opengl.pow2TexWidth;
+    sdl.fboHeight = sdl.opengl.pow2TexHeight;
 
     sdl.glActiveTexture(GL_TEXTURE0);
     CheckGL;
@@ -433,7 +435,7 @@ static void GFX_RebuildFramebufferTexture()
         LOG_MSG("Warning: Framebuffer object incomplete! (%d)", fboStat);
     }
 
-    glViewport(0,0, sdl.clip.w, sdl.clip.h);
+    glViewport(0,0, sdl.draw.width + 2, sdl.draw.height + 2);
     CheckGL;
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     CheckGL;
@@ -761,11 +763,7 @@ dosurface:
 		{
 			sdl.draw.bpp = bpp = 8;
 		}
-		else if (flags & GFX_LOVE_15)
-		{
-			sdl.draw.bpp = bpp = 15;
-		}
-		else if (flags & GFX_LOVE_16)
+		else if ((flags & GFX_LOVE_15) || (flags & GFX_LOVE_16))
 		{
 			sdl.draw.bpp = bpp = 16;
 		}
@@ -788,6 +786,35 @@ dosurface:
 			}
 			free(tmpBuf);
 		}
+		else if (bpp == 16)
+		{
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, sdl.opengl.pow2TexWidth, sdl.opengl.pow2TexHeight, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
+			CheckGL;
+			// Fill with blank
+			// This alloc is usually 1K
+			//
+			GLubyte *tmpBuf = (GLubyte*)calloc(sdl.opengl.pow2TexWidth, sizeof(GLushort));
+			for (int texClear = 0; texClear < sdl.opengl.pow2TexHeight; texClear++)
+			{
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, texClear, sdl.opengl.pow2TexWidth, 1, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, tmpBuf);
+			}
+			free(tmpBuf);
+		}
+		else if (bpp == 32)
+		{
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, sdl.opengl.pow2TexWidth, sdl.opengl.pow2TexHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+			CheckGL;
+			// Fill with blank
+			// This alloc is usually 1K
+			//
+			GLubyte *tmpBuf = (GLubyte*)calloc(sdl.opengl.pow2TexWidth, sizeof(GLuint));
+			for (int texClear = 0; texClear < sdl.opengl.pow2TexHeight; texClear++)
+			{
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, texClear, sdl.opengl.pow2TexWidth, 1, GL_RGBA, GL_UNSIGNED_BYTE, tmpBuf);
+			}
+			free(tmpBuf);
+		}
+
 		CheckGL;
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		CheckGL;
@@ -799,7 +826,7 @@ dosurface:
 		CheckGL;
 		sdl.glUseProgram(sdl.progPalette);
 		CheckGL;
-		sdl.glUniform2f(sdl.palOneAddr, 1.0f / sdl.opengl.pow2TexWidth, 1.0f / sdl.opengl.pow2TexHeight);
+		sdl.glUniform2f(sdl.palOneAddr, 1.0f / (width + 2), 1.0f / (height + 2));
 		CheckGL;
 		sdl.glUniform4f(sdl.palSourceSizeAddr, (GLfloat)width + 2, (GLfloat)height + 2, 0.0f, 0.0f);
 		CheckGL;
@@ -868,7 +895,7 @@ float CountMillisecs(timespec *pStart, timespec *pEnd)
     return (float)(nsecsElapsed / 1000000.0);
 }
 
-//static unsigned sg_GFXUpdateCounter = 0;
+static unsigned sg_GFXUpdateCounter = 0;
 
 bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 	if (!sdl.active || sdl.updating)
@@ -879,11 +906,12 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 //    float milliElapsed = CountMillisecs(&lastStart, &sdl.fpsClockCounter);
 //    float fps = 1000.0f / milliElapsed;
 
-//    sg_GFXUpdateCounter++;
-//    if (!(sg_GFXUpdateCounter & 0x3F))
-//    {
+    sg_GFXUpdateCounter++;
+    if (!(sg_GFXUpdateCounter & 0x01))
+    {
         // LOG_MSG("%.1f FPS", fps);
-//    }
+        return false;
+    }
 
 	switch (sdl.desktop.type) {
 #if C_OPENGL
@@ -898,18 +926,17 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 		sdl.nextRenderLineNum = sdl.draw.height;
 		sdl.updating=true;
 
-		SDL_GL_SwapWindow(sdl.window);
-
         if (sdl.bSmooth2Pass)
         {
             // Switch back to the texture render target
             //
             sdl.glBindFramebuffer(GL_FRAMEBUFFER, sdl.fboBackbuffer);
             CheckGL;
-            glViewport(0,0, sdl.clip.w, sdl.clip.h);
+            glViewport(0,0, sdl.draw.width + 2, sdl.draw.height + 2);
             CheckGL;
         }
 
+		glClear(GL_COLOR_BUFFER_BIT);
 		sdl.glActiveTexture(GL_TEXTURE0);
 		CheckGL;
 		glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
@@ -966,7 +993,7 @@ void GFX_LineHandler32(const void * src)
 
 	glTexSubImage2D(GL_TEXTURE_2D,
 					0,
-					0, sdl.nextRenderLineNum--,
+					1, sdl.nextRenderLineNum--,
 					sdl.draw.width, 1,
 					GL_BGRA_EXT, GL_UNSIGNED_INT_8_8_8_8_REV,
 					src);
@@ -1049,7 +1076,8 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
                 CheckGL;
                 sdl.glUniform1i(sdl.fbTexUnitAddr, 0);
                 CheckGL;
-                sdl.glUniform2f(sdl.fbTexcoordScaleAddr, (GLfloat)sdl.clip.w / sdl.fboWidth, (GLfloat)sdl.clip.h / sdl.fboHeight);
+                sdl.glUniform2f(sdl.fbTexcoordScaleAddr, (GLfloat)(sdl.draw.width + 2) / sdl.fboWidth, (GLfloat)(sdl.draw.height + 2) / sdl.fboHeight);
+//                sdl.glUniform2f(sdl.fbTexcoordScaleAddr, 1.0f, 1.0f);
                 CheckGL;
 
                 sdl.glBindBuffer(GL_ARRAY_BUFFER, sdl.vertBuffer);
@@ -1065,7 +1093,8 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
                 CheckGL;
             }
 
-			//SDL_GL_SwapWindow(sdl.window);
+			SDL_GL_SwapWindow(sdl.window);
+
 		break;
 #endif	// C_OPENGL
 	default:
@@ -1082,7 +1111,21 @@ void GFX_SetPalette(Bitu start,Bitu count,GFX_PalEntry * entries) {
 	CheckGL;
 	glBindTexture(GL_TEXTURE_2D, sdl.texPalette);
 	CheckGL;
-	glTexSubImage2D(GL_TEXTURE_2D, 0, start, 0, count, 1, GL_RGBA, GL_UNSIGNED_BYTE, entries);
+
+	GLushort *pTempBuf = (GLushort*)alloca(count * sizeof(GLushort));
+
+    for (int i = 0; i < count; i++)
+    {
+        // We are actually losing one bit of R&B color from native VGA.
+        // Maybe I should keep it 32-bit? But Arm GPUs
+        // need all the help they can get.
+        //
+        pTempBuf[i] = ((GLushort)(entries[i].r >> 3) << 11) |
+                      ((GLushort)(entries[i].g >> 2) << 5)  |
+                      ((GLushort)(entries[i].b >> 3) << 0);
+    }
+
+	glTexSubImage2D(GL_TEXTURE_2D, 0, start, 0, count, 1, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, pTempBuf);
 	CheckGL;
 }
 
@@ -1324,9 +1367,9 @@ inline const char *os_separator()
 }
 
 #if defined (WIN32)
-static const char* sg_pathToShaders = ".\\";
+const char* sg_pathToShaders = ".\\";
 #else
-static const char* sg_pathToShaders = "/usr/local/share/dosbox/";
+const char* sg_pathToShaders = "/usr/local/share/dosbox/";
 #endif // defined
 
 
@@ -1351,7 +1394,7 @@ static GLuint LoadShader(const char *szShaderFile, GLenum shaderType)
 		char lineBuffer[64 * 1024];
 
 		lineBuffer[0] = 0;
-		fgets(lineBuffer, 64 * 1024, fp);
+		char *szUnused = fgets(lineBuffer, 64 * 1024, fp);
 
 		rgszShaderCodeLine = (char**)realloc(rgszShaderCodeLine, (codeLine + 1) * sizeof(char*));
 		rgLineLengths = (int*)realloc(rgLineLengths, (codeLine + 1) * sizeof(int));
@@ -1675,7 +1718,7 @@ static void GUI_StartUp(Section * sec) {
 	CheckGL;
 	Bit32u *rgBlackPal = (Bit32u*)alloca(256 * sizeof(Bit32u));
 	memset(rgBlackPal, 0, 256 * sizeof(Bit32u));
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgBlackPal);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 256, 1, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, rgBlackPal);
 	CheckGL;
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	CheckGL;
