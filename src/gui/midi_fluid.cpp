@@ -172,7 +172,7 @@ void MidiHandler_fluid::PlayMsg(Bit8u *msg) {
 
           case 0x0E:
           {
-            unsigned pitchBendValue = (((unsigned)d1Data) << 7) | (unsigned)d2Data;
+            unsigned pitchBendValue = (((unsigned)d2Data) << 7) | (unsigned)d1Data;
             fluid_synth_pitch_bend(synth, channelNum, pitchBendValue);
             break;
           }
