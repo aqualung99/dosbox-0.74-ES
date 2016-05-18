@@ -188,6 +188,8 @@
 		<Unit filename="src/gui/midi_alsa.h" />
 		<Unit filename="src/gui/midi_coreaudio.h" />
 		<Unit filename="src/gui/midi_coremidi.h" />
+		<Unit filename="src/gui/midi_fluid.cpp" />
+		<Unit filename="src/gui/midi_fluid.h" />
 		<Unit filename="src/gui/midi_mt32.cpp" />
 		<Unit filename="src/gui/midi_mt32.h" />
 		<Unit filename="src/gui/midi_oss.h" />

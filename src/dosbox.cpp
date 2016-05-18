@@ -344,6 +344,7 @@ static void DOSBOX_RealInit(Section * sec) {
 	else E_Exit("DOSBOX:Unknown machine type %s",mtype.c_str());
 }
 
+extern const char* sg_pathToShaders;
 
 void DOSBOX_Init(void) {
 	Section_prop * secprop;
@@ -491,6 +492,7 @@ void DOSBOX_Init(void) {
 	                  "  See the README/Manual for more details.");
 
 #include "mt32options.h"
+#include "fluidsynthoptions.h"
 
 #if C_DEBUG
 	secprop=control->AddSection_prop("debug",&DEBUG_Init);

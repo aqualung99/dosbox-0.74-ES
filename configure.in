@@ -524,6 +524,7 @@ esac
 AC_CONFIG_FILES([
 Makefile
 shaders/Makefile
+soundfonts/Makefile
 src/Makefile
 src/cpu/Makefile
 src/cpu/core_full/Makefile

@@ -107,6 +107,13 @@ static MidiHandler_mt32 &Midi_mt32 = MidiHandler_mt32::GetInstance();
 
 #endif // C_MT32EMU
 
+#if defined(C_FLUIDSYNTH)
+#define DOSBOX_MIDI_H
+#include "midi_fluid.cpp"
+static MidiHandler_fluid &Midi_fluid = MidiHandler_fluid::GetInstance();
+#undef DOSBOX_MIDI_H
+#endif
+
 static struct {
 	Bitu status;
 	Bitu cmd_len;
