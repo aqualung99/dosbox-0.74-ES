@@ -1,0 +1,79 @@
+
+Step 1: Install SDL 2.0.4
+
+  a) Grab the source code here: 
+      https://www.libsdl.org/release/SDL2-2.0.4.tar.gz
+  b) Extract to a dev folder
+  c) Go to that folder
+  d) $ ./autogen.sh
+  e) $ ./configure
+        *** NOTE ***
+         Depending on your platform, you may need to pass parameters to SDL's config.
+         It's important to get this right -- SDL having proper access to the hardware is key.
+         On Odroid, here's the parameters I use:
+	./configure --enable-video-wayland=no --enable-video-opengl=no --enable-alsa=no --enable-diskaudio=no --enable-video-mir=no --enable-directx=no --enable-nas=no --enable-video-opengles1=no
+	This makes sure we use X11, gles2, and pulseaudio (the only core libraries that I could get to work properly.)
+  f) $ make -j4
+      Or, use "make -j8" if you have 8 cores :)
+  g) $ sudo make install
+
+ 
+(Optional) Step 2: Install SDL_Sound
+
+  a) Install Mercurial
+      $ sudo apt-get install mercurial
+  b) Go to your dev folder
+  c) $ hg clone http://hg.icculus.org/icculus/SDL_sound/
+  d) $ cd SDL_sound
+  e) $ ./bootstrap
+  f) $ ./configure
+  g) $ make -j4
+  h) $ sudo make install
+  
+  
+ (Optional) Step 3: Install SDL_Net
+ 
+  a) Grab the source code here:
+      https://www.libsdl.org/projects/SDL_net/release/SDL2_net-2.0.1.tar.gz
+  b) Extract to a dev folder
+  c) Go to that folder
+  d) $ ./autogen.sh
+  e) $ ./configure
+  f) $ make -j4
+  g) $ sudo make install
+
+  
+  (Recommended) Step 4: Install MUNT (MT32 Emulator)
+  
+  a) Install git
+      sudo apt-get install git
+  b) goto dev folder
+  c) $ git checkout http://www.github.com/munt/
+  d) $ cd munt/mt32emu
+  e) $ cmake -DCMAKE_BUILD_TYPE:STRING=Release .
+  f) $ make -j4
+  g) sudo make install
+  
+  
+  (Recommended) Step 5: Install FluidSynth (General MIDI [GM] Synthesizer)
+  
+  a) Grab the source code here:
+      https://sourceforge.net/projects/fluidsynth/files/latest/download?source=files
+  b) Extract to a dev folder, then go to that folder
+  c) $ ./autogen.sh
+  d) $ ./configure
+  f) $ make -j4
+  g) $ sudo make install
+ 
+ 
+ Step 6: Install DosBox 0.75
+ 
+  a) Install svn
+       I use "kdesvn" because I prefer a GUI
+  b) Source is here for now: 
+       https://starlore.unfuddle.com/svn/starlore_joel/DosBox
+  d) Checkout somewhere
+  e) $ ./autogen.sh
+  f) $ ./configure
+  g) $ make -j4
+  h) $ sudo make install
