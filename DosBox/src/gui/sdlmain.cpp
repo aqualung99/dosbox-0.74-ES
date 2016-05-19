@@ -242,7 +242,10 @@ struct SDL_Block {
 
 	GLuint vsPalette;
 	GLuint psPalette;
+	GLuint psNoPalette;
 	GLuint progPalette;
+	GLuint progNoPalette;
+	GLuint progMainToUse;
 
     GLuint vsRect;
     GLuint psRect;
@@ -525,6 +528,42 @@ static void GFX_DrawAllRectBuffers()
 }
 
 
+void GFX_SetMainShader(bool bPaletted)
+{
+    if (bPaletted)
+    {
+        sdl.progMainToUse = sdl.progPalette;
+    }
+    else
+    {
+        sdl.progMainToUse = sdl.progNoPalette;
+    }
+
+    sdl.glUseProgram(sdl.progMainToUse);
+    CheckGL;
+    sdl.palTexUnitAddr = sdl.glGetUniformLocation(sdl.progMainToUse, "texUnit");
+    CheckGL;
+    sdl.palPalUnitAddr = sdl.glGetUniformLocation(sdl.progMainToUse, "palUnit");
+    CheckGL;
+    sdl.palPositionAddr = sdl.glGetAttribLocation(sdl.progMainToUse, "position");
+    CheckGL;
+    sdl.palSourceSizeAddr = sdl.glGetUniformLocation(sdl.progMainToUse, "sourceSize");
+    CheckGL;
+    sdl.palOneAddr = sdl.glGetUniformLocation(sdl.progMainToUse, "one");
+    CheckGL;
+    //sdl.palTargetSizeAddr = sdl.glGetUniformLocation(sdl.progPalette, "targetSize");
+    //CheckGL;
+    sdl.palUvRatioAddr = sdl.glGetUniformLocation(sdl.progMainToUse, "uvRatio");
+    CheckGL;
+    sdl.palAspectFixAddr = sdl.glGetUniformLocation(sdl.progMainToUse, "aspectFix");
+    CheckGL;
+
+    sdl.glVertexAttribPointer(sdl.palPositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
+    CheckGL;
+}
+
+
+
 extern const char* RunningProgram;
 extern bool CPU_CycleAutoAdjust;
 //Globals for keyboard initialisation
@@ -726,7 +765,7 @@ dosurface:
 			free(sdl.opengl.framebuf);
 		}
 		sdl.opengl.framebuf=0;
-		if (!(flags&GFX_CAN_32) || (flags & GFX_RGBONLY)) goto dosurface;
+
 		int texsize=2 << int_log2(width > height ? width : height);
 		sdl.opengl.pow2TexWidth = 2 << int_log2(width + 2);		// One texel border on each side
 		sdl.opengl.pow2TexHeight = 2 << int_log2(height + 2);	// One texel border on each side
@@ -824,8 +863,14 @@ dosurface:
 		CheckGL;
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		CheckGL;
-		sdl.glUseProgram(sdl.progPalette);
-		CheckGL;
+		if (bpp == 8)
+		{
+            GFX_SetMainShader(true);
+		}
+		else
+		{
+            GFX_SetMainShader(false);
+		}
 		sdl.glUniform2f(sdl.palOneAddr, 1.0f / (width + 2), 1.0f / (height + 2));
 		CheckGL;
 		sdl.glUniform4f(sdl.palSourceSizeAddr, (GLfloat)width + 2, (GLfloat)height + 2, 0.0f, 0.0f);
@@ -995,7 +1040,7 @@ void GFX_LineHandler32(const void * src)
 					0,
 					1, sdl.nextRenderLineNum--,
 					sdl.draw.width, 1,
-					GL_BGRA_EXT, GL_UNSIGNED_INT_8_8_8_8_REV,
+					GL_RGBA, GL_UNSIGNED_BYTE,
 					src);
 
 }
@@ -1026,13 +1071,13 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
             CheckGL;
 
-			sdl.glUseProgram(sdl.progPalette);
-			CheckGL;
-
 			sdl.glUniform1i(sdl.palTexUnitAddr, 0);
 			CheckGL;
-			sdl.glUniform1i(sdl.palPalUnitAddr, 1);
-			CheckGL;
+			if (sdl.draw.bpp == 8)
+			{
+                sdl.glUniform1i(sdl.palPalUnitAddr, 1);
+                CheckGL;
+            }
 
 			sdl.glBindBuffer(GL_ARRAY_BUFFER, sdl.vertBuffer);
 			CheckGL;
@@ -1091,6 +1136,15 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
                 CheckGL;
                 sdl.glDisableVertexAttribArray(sdl.fbPositionAddr);
                 CheckGL;
+
+                if (sdl.draw.bpp == 8)
+                {
+                    GFX_SetMainShader(true);
+                }
+                else
+                {
+                    GFX_SetMainShader(false);
+                }
             }
 
 			SDL_GL_SwapWindow(sdl.window);
@@ -1679,16 +1733,19 @@ static void GUI_StartUp(Section * sec) {
 
     if (sdl.progSimple < 0)
     {
-        throw 0;
+        return;
     }
 
 	sdl.vsPalette = LoadShader(section->Get_string("vertex_shader"), GL_VERTEX_SHADER);
 	sdl.psPalette = LoadShader(section->Get_string("pixel_shader"), GL_FRAGMENT_SHADER);
+	sdl.psNoPalette = LoadShader(section->Get_string("pixel_shader_no_palette"), GL_FRAGMENT_SHADER);
 	sdl.progPalette = CreateProgram(sdl.vsPalette, sdl.psPalette);
+	sdl.progNoPalette = CreateProgram(sdl.vsPalette, sdl.psNoPalette);
+	sdl.progMainToUse = sdl.progPalette;
 
     if (sdl.progPalette < 0)
     {
-        throw 0;
+        return;
     }
 
 //	sdl.vsRect = LoadShader("solidRect.vs", GL_VERTEX_SHADER);
@@ -1808,28 +1865,6 @@ static void GUI_StartUp(Section * sec) {
 		sdl.glVertexAttribPointer(sdl.simplePositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
 		CheckGL;
 
-		sdl.glUseProgram(sdl.progPalette);
-		CheckGL;
-		sdl.palTexUnitAddr = sdl.glGetUniformLocation(sdl.progPalette, "texUnit");
-		CheckGL;
-		sdl.palPalUnitAddr = sdl.glGetUniformLocation(sdl.progPalette, "palUnit");
-		CheckGL;
-		sdl.palPositionAddr = sdl.glGetAttribLocation(sdl.progPalette, "position");
-		CheckGL;
-		sdl.palSourceSizeAddr = sdl.glGetUniformLocation(sdl.progPalette, "sourceSize");
-		CheckGL;
-		sdl.palOneAddr = sdl.glGetUniformLocation(sdl.progPalette, "one");
-		CheckGL;
-		//sdl.palTargetSizeAddr = sdl.glGetUniformLocation(sdl.progPalette, "targetSize");
-		//CheckGL;
-		sdl.palUvRatioAddr = sdl.glGetUniformLocation(sdl.progPalette, "uvRatio");
-		CheckGL;
-		sdl.palAspectFixAddr = sdl.glGetUniformLocation(sdl.progPalette, "aspectFix");
-		CheckGL;
-
-        sdl.glVertexAttribPointer(sdl.palPositionAddr, 2, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 2, (void*)0);
-        CheckGL;
-
         /*
         sdl.glUseProgram(sdl.progRect);
         CheckGL;
@@ -1931,8 +1966,6 @@ static void GUI_StartUp(Section * sec) {
 			SDL_GL_SwapWindow(sdl.window);
 		}
 
-		sdl.glUseProgram(sdl.progPalette);
-		CheckGL;
 		// We don't need alpha blending anymore.
 		// On older hardware it will still be expensive
 		//
@@ -2243,7 +2276,13 @@ void Config_Add_SDL() {
     Pstring = sdl_sec->Add_path("pixel_shader", Property::Changeable::OnlyAtStart, shaderPathBuf);
     Pstring->Set_help("File used as the fragment shader for the main renderer. Should be in the OpenGL-ES Shading Language. Change this to make it better.");
 
-    Pbool = sdl_sec->Add_bool("smooth_2pass", Property::Changeable::OnlyAtStart, false);
+    strcpy(shaderPathBuf, sg_pathToShaders);
+    strcat(shaderPathBuf, "DosBoxNoPal.ps");
+
+    Pstring = sdl_sec->Add_path("pixel_shader_no_palette", Property::Changeable::OnlyAtStart, shaderPathBuf);
+    Pstring->Set_help("File used as the fragment shader for the main renderer when DOS is in a 16- or 32-bit color mode (very rare...only program I know that uses it is FRACTINT.) In this mode, no palette is used which actually makes it slightly faster.");
+
+    Pbool = sdl_sec->Add_bool("smooth_2pass", Property::Changeable::OnlyAtStart, true);
     Pbool->Set_help("Instead of rendering the native image directly to the framebuffer, render to a texture first. Then use bilinear interpolation to render that texture to the screen. If you aren't using a CRT shader, you probably want to set this to true. If you are using a CRT shader, you probably want to set this to false.");
 
 /*
