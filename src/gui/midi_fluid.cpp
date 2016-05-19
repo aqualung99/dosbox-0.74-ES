@@ -110,23 +110,11 @@ void MidiHandler_fluid::Close(void) {
 	open = false;
 }
 
-struct MIDIMessage
-{
-    unsigned int messageType : 4;
-    unsigned int channelNum : 4;
-    unsigned int d1Flag : 1;
-    unsigned int d1Data : 7;
-    unsigned int d2Flag : 1;
-    unsigned int d2Data : 7;
-    unsigned int other : 8;
-};
-
 void MidiHandler_fluid::PlayMsg(Bit8u *msg) {
     if (renderInThread) {
     //		synth->playMsg(SDL_SwapLE32(*(Bit32u *)msg), getMidiEventTimestamp());
     } else {
         Bit32u endianCorrectMsg = SDL_SwapLE32(*(Bit32u *)msg);
-//        MIDIMessage *pMMsg = (MIDIMessage*)(&endianCorrectMsg);
         unsigned char *msgBytes = (unsigned char *)&endianCorrectMsg;
         unsigned char msgType = (msgBytes[0] & 0xF0) >> 4;
         unsigned char channelNum = (msgBytes[0] & 0x0F);
@@ -147,10 +135,13 @@ void MidiHandler_fluid::PlayMsg(Bit8u *msg) {
             break;
           }
 
-        case 0x0A:
-        {
-            //
-        }
+            case 0x0A:
+            {
+                // FluidSynth has nothing for us to call
+                // to handle this message. So, just ignore it!
+                //
+                break;
+            }
 
           case 0x0B:
           {

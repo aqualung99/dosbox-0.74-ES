@@ -1,0 +1,20 @@
+#version 100
+
+precision mediump float;
+precision mediump int;
+
+uniform sampler2D texUnit;
+uniform vec4 sourceSize;
+uniform sampler2D palUnit;
+uniform vec2 one;
+uniform vec2 uvRatio;
+
+varying vec2 tcNorm;
+
+
+#define LOOKUP(c)			texture2D(texUnit, (c) * uvRatio)
+
+
+void main() {
+	gl_FragColor = LOOKUP(tcNorm);
+}
