@@ -61,13 +61,15 @@ typedef struct {
 		double ratio;
 		float fps;
 	} src;
-#ifndef JOEL_REMOVED
 	struct {
 		Bitu count;
 		Bitu max;
+#ifndef JOEL_REMOVED
 		Bitu index;
 		Bit8u hadSkip[RENDER_SKIP_CACHE];
+#endif
 	} frameskip;
+#ifndef JOEL_REMOVED
 	struct {
 		Bitu size;
 		scalerMode_t inMode;
