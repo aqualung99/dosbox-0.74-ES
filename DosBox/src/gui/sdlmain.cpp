@@ -681,13 +681,13 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 		sdl_flags |= SDL_WINDOW_OPENGL;
 	}
 	if (fixedWidth && fixedHeight) {
-		double ratio_w=(double)fixedWidth/(sdl.draw.width*sdl.draw.scalex);
-		double ratio_h=(double)fixedHeight/(sdl.draw.height*sdl.draw.scaley);
+		double ratio_w=(double)fixedWidth/((sdl.draw.width*sdl.draw.scalex) + 2);
+		double ratio_h=(double)fixedHeight/((sdl.draw.height*sdl.draw.scaley) + 2);
 		if ( ratio_w < ratio_h) {
 			sdl.clip.w=fixedWidth;
-			sdl.clip.h=(Bit16u)(sdl.draw.height*sdl.draw.scaley*ratio_w);
+			sdl.clip.h=(Bit16u)(sdl.draw.height*sdl.draw.scaley*ratio_w) + 2;
 		} else {
-			sdl.clip.w=(Bit16u)(sdl.draw.width*sdl.draw.scalex*ratio_h);
+			sdl.clip.w=(Bit16u)(sdl.draw.width*sdl.draw.scalex*ratio_h) + 2;
 			sdl.clip.h=(Bit16u)fixedHeight;
 		}
 
@@ -744,24 +744,25 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 			// Check for non-square pixels, and adjust
 			//
 			float clipRatio = (float)sdl.clip.w / sdl.clip.h;
+			float fourbythreeRatio = (3.0f * clipRatio) / 4.0f;
 			if (clipRatio > (4.0f / 3.0f))
 			{
 				// Pixels are vertically stretched tall & skinny
 				// We need extra height to accomodate
 				//
-				sdl.clip.h = (int)((sdl.clip.h * (clipRatio / (4.0f / 3.0f))) + 0.5f);
+				sdl.clip.h = (int)((sdl.clip.h * fourbythreeRatio) + 0.5f);
 			}
 			else if (clipRatio < (4.0f / 3.0f))
 			{
 				// Pixels are horizontally stretched short & fat
 				// We need extra width to accomodate
 				//
-				sdl.clip.w = (int)((sdl.clip.w * (clipRatio / (4.0f / 3.0f))) + 0.5f);
+				sdl.clip.w = (int)((sdl.clip.w * fourbythreeRatio) + 0.5f);
 			}
 		}
 
 		float clipRatio = (float)sdl.clip.w / sdl.clip.h;
-		sdl.windowAspectFor4x3 = (4.0f / 3.0f) / clipRatio;
+		sdl.windowAspectFor4x3 = 4.0f / (3.0f * clipRatio);
 
 		if (sdl.desktop.fullscreen)
 		{
@@ -924,7 +925,17 @@ dosurface:
 		CheckGL;
 		sdl.glUniform2f(sdl.palUvRatioAddr, (GLfloat)(width + 2) / sdl.opengl.pow2TexWidth, (GLfloat)(height + 2) / sdl.opengl.pow2TexHeight);
 		CheckGL;
-		sdl.glUniform1f(sdl.palAspectFixAddr, sdl.windowAspectFor4x3);
+
+		// Don't do any aspect correction when we're rendering pass 1 of 2
+		//
+		if (sdl.bSmooth2Pass)
+		{
+			sdl.glUniform1f(sdl.palAspectFixAddr, 1.0f);
+		}
+		else
+		{
+			sdl.glUniform1f(sdl.palAspectFixAddr, sdl.windowAspectFor4x3);
+		}
 		CheckGL;
 
 		sdl.desktop.type=SCREEN_OPENGL;
@@ -1000,12 +1011,12 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 //    float milliElapsed = CountMillisecs(&lastStart, &sdl.fpsClockCounter);
 //    float fps = 1000.0f / milliElapsed;
 
-    sg_GFXUpdateCounter++;
-    if (!(sg_GFXUpdateCounter & 0x01))
-    {
+	sg_GFXUpdateCounter++;
+//    if (!(sg_GFXUpdateCounter & 0x01))
+//    {
         // LOG_MSG("%.1f FPS", fps);
-        return false;
-    }
+//        return false;
+//    }
 
 	switch (sdl.desktop.type) {
 #if C_OPENGL
@@ -1183,7 +1194,23 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
                 CheckGL;
                 glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
                 CheckGL;
-                sdl.glDisableVertexAttribArray(sdl.fbPositionAddr);
+
+				// Debug code, show the source texture
+				//
+/*
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                CheckGL;
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                CheckGL;
+                sdl.glUniform2f(sdl.fbTexcoordScaleAddr, (GLfloat)(sdl.draw.width + 2) / sdl.fboWidth, (GLfloat)(sdl.draw.height + 2) / sdl.fboHeight);
+                CheckGL;
+				glViewport(0, 0, sdl.draw.width + 2, sdl.draw.height + 2);
+				CheckGL;
+                glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
+                CheckGL;
+*/
+
+				sdl.glDisableVertexAttribArray(sdl.fbPositionAddr);
                 CheckGL;
 
 				if (sdl.draw.bpp == 8)
@@ -1803,13 +1830,8 @@ static void GUI_StartUp(Section * sec) {
 //	sdl.psRect = LoadShader("solidRect.ps", GL_FRAGMENT_SHADER);
 //	sdl.progRect = CreateProgram(sdl.vsRect, sdl.psRect);
 
-    strcpy(shaderPathBuf, sg_pathToShaders);
-    strcat(shaderPathBuf, "fb.vs");
-    sdl.vsFB = LoadShader(shaderPathBuf, GL_VERTEX_SHADER);
-
-    strcpy(shaderPathBuf, sg_pathToShaders);
-    strcat(shaderPathBuf, "fb.ps");
-    sdl.psFB = LoadShader(shaderPathBuf, GL_FRAGMENT_SHADER);
+    sdl.vsFB = LoadShader(section->Get_string("vertex_shader_pass2"), GL_VERTEX_SHADER);
+    sdl.psFB = LoadShader(section->Get_string("pixel_shader_pass2"), GL_FRAGMENT_SHADER);
     sdl.progFB = CreateProgram(sdl.vsFB, sdl.psFB);
 
     if (sdl.progFB < 0)
@@ -2334,8 +2356,24 @@ void Config_Add_SDL() {
     Pstring = sdl_sec->Add_path("pixel_shader_no_palette", Property::Changeable::OnlyAtStart, shaderPathBuf);
     Pstring->Set_help("File used as the fragment shader for the main renderer when DOS is in a 16- or 32-bit color mode (very rare...only program I know that uses it is FRACTINT.) In this mode, no palette is used which actually makes it slightly faster.");
 
+    strcpy(shaderPathBuf, sg_pathToShaders);
+    strcat(shaderPathBuf, "fb.vs");
+
+    Pstring = sdl_sec->Add_path("vertex_shader_pass2", Property::Changeable::OnlyAtStart, shaderPathBuf);
+    Pstring->Set_help("File used as the vertex shader for the 2nd-pass renderer. Only used when 2nd pass is enabled.");
+
+    strcpy(shaderPathBuf, sg_pathToShaders);
+    strcat(shaderPathBuf, "fb.ps");
+
+    Pstring = sdl_sec->Add_path("pixel_shader_pass2", Property::Changeable::OnlyAtStart, shaderPathBuf);
+    Pstring->Set_help("File used as the fragment shader for the 2nd-pass renderer. Only used when 2nd pass is enabled. Bilinear filtering is enabled during pass 2 (unlike during pass 1.)");
+
     Pbool = sdl_sec->Add_bool("smooth_2pass", Property::Changeable::OnlyAtStart, true);
     Pbool->Set_help("Instead of rendering the native image directly to the framebuffer, render to a texture first. Then use bilinear interpolation to render that texture to the screen. If you aren't using a CRT shader, you probably want to set this to true. If you are using a CRT shader, you probably want to set this to false.");
+
+	Pint = sdl_sec->Add_int("frameskip",Property::Changeable::DBoxAlways,0);
+	Pint->SetMinMax(0,10);
+	Pint->Set_help("How many frames DOSBox skips before drawing one.");
 
 /*
 	Pbool = sdl_sec->Add_bool("usescancodes",Property::Changeable::DBoxAlways,true);

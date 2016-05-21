@@ -97,12 +97,11 @@ bool RENDER_StartUpdate(void) {
 	if (GCC_UNLIKELY(!render.active))
 		return false;
 
-//	sg_StartUpdateCounter++;
-//	if (sg_StartUpdateCounter & 0x01)
-//	{
-//        return false;
-//	}
-
+	if (GCC_UNLIKELY(render.frameskip.count<render.frameskip.max)) {
+		render.frameskip.count++;
+		return false;
+	}
+	render.frameskip.count=0;
 	if (render.src.bpp == 8)
 	{
 		Check_Palette();
@@ -227,6 +226,22 @@ void RENDER_SetSize(Bitu width,Bitu height,Bitu bpp,float fps,double ratio,bool 
 }
 
 extern void GFX_SetTitle(Bit32s cycles, Bits frameskip,bool paused);
+static void IncreaseFrameSkip(bool pressed) {
+	if (!pressed)
+		return;
+	if (render.frameskip.max<10) render.frameskip.max++;
+	LOG_MSG("Frame Skip at %d",render.frameskip.max);
+	GFX_SetTitle(-1,render.frameskip.max,false);
+}
+
+static void DecreaseFrameSkip(bool pressed) {
+	if (!pressed)
+		return;
+	if (render.frameskip.max>0) render.frameskip.max--;
+	LOG_MSG("Frame Skip at %d",render.frameskip.max);
+	GFX_SetTitle(-1,render.frameskip.max,false);
+}
+
 /* Disabled as I don't want to waste a keybind for that. Might be used in the future (Qbix)
 static void ChangeScaler(bool pressed) {
 	if (!pressed)
@@ -250,6 +265,8 @@ void RENDER_Init(Section * sec) {
 	render.pal.first=256;
 	render.pal.last=0;
 	render.aspect=section->Get_bool("aspect");
+	render.frameskip.max=section->Get_int("frameskip");
+	render.frameskip.count=0;
 
 	//If something changed that needs a ReInit
 	// Only ReInit when there is a src.bpp (fixes crashes on startup and directly changing the scaler without a screen specified yet)
@@ -258,5 +275,8 @@ void RENDER_Init(Section * sec) {
 
 	if(!running) render.updating=true;
 	running = true;
-}
 
+	MAPPER_AddHandler(DecreaseFrameSkip,MK_f7,MMOD1,"decfskip","Dec Fskip");
+	MAPPER_AddHandler(IncreaseFrameSkip,MK_f8,MMOD1,"incfskip","Inc Fskip");
+	GFX_SetTitle(-1,render.frameskip.max,false);
+}
