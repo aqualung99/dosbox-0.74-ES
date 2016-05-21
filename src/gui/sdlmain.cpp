@@ -63,9 +63,13 @@
 
 
 #if C_OPENGL
-
+#ifdef WIN32
+#include "SDL_opengl.h"
+#include "SDL_opengl_glext.h"
+#else
 #include "SDL2/SDL_opengl.h"
 #include "SDL2/SDL_opengl_glext.h"
+#endif
 
 #ifndef APIENTRY
 #define APIENTRY
@@ -291,9 +295,11 @@ struct SDL_Block {
 	float windowAspectFor4x3;
 	unsigned nextRenderLineNum;
 
+#ifndef WIN32
 	timespec clockRes;
     timespec fpsClockCounter;
     timespec vgaClockCounter;
+#endif
 
 
 //	SDL_Renderer * renderer;
@@ -830,7 +836,7 @@ dosurface:
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, sdl.opengl.pow2TexWidth, sdl.opengl.pow2TexHeight, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
 			CheckGL;
 			// Fill with blank
-			// This alloc is usually 1K
+			// This alloc is usually 2K
 			//
 			GLubyte *tmpBuf = (GLubyte*)calloc(sdl.opengl.pow2TexWidth, sizeof(GLushort));
 			for (int texClear = 0; texClear < sdl.opengl.pow2TexHeight; texClear++)
@@ -841,15 +847,15 @@ dosurface:
 		}
 		else if (bpp == 32)
 		{
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, sdl.opengl.pow2TexWidth, sdl.opengl.pow2TexHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA, sdl.opengl.pow2TexWidth, sdl.opengl.pow2TexHeight, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
 			CheckGL;
 			// Fill with blank
-			// This alloc is usually 1K
+			// This alloc is usually 4K
 			//
 			GLubyte *tmpBuf = (GLubyte*)calloc(sdl.opengl.pow2TexWidth, sizeof(GLuint));
 			for (int texClear = 0; texClear < sdl.opengl.pow2TexHeight; texClear++)
 			{
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, texClear, sdl.opengl.pow2TexWidth, 1, GL_RGBA, GL_UNSIGNED_BYTE, tmpBuf);
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, texClear, sdl.opengl.pow2TexWidth, 1, GL_BGRA, GL_UNSIGNED_BYTE, tmpBuf);
 			}
 			free(tmpBuf);
 		}
@@ -931,6 +937,7 @@ static void SwitchFullScreen(bool pressed) {
 	GFX_SwitchFullScreen();
 }
 
+#ifndef WIN32
 float CountMillisecs(timespec *pStart, timespec *pEnd)
 {
     time_t secsElapsed = pEnd->tv_sec - pStart->tv_sec;
@@ -939,6 +946,7 @@ float CountMillisecs(timespec *pStart, timespec *pEnd)
 
     return (float)(nsecsElapsed / 1000000.0);
 }
+#endif
 
 static unsigned sg_GFXUpdateCounter = 0;
 
@@ -1040,7 +1048,7 @@ void GFX_LineHandler32(const void * src)
 					0,
 					1, sdl.nextRenderLineNum--,
 					sdl.draw.width, 1,
-					GL_RGBA, GL_UNSIGNED_BYTE,
+					GL_BGRA, GL_UNSIGNED_BYTE,
 					src);
 
 }
@@ -1137,15 +1145,15 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
                 sdl.glDisableVertexAttribArray(sdl.fbPositionAddr);
                 CheckGL;
 
-                if (sdl.draw.bpp == 8)
-                {
-                    GFX_SetMainShader(true);
-                }
-                else
-                {
-                    GFX_SetMainShader(false);
-                }
-            }
+				if (sdl.draw.bpp == 8)
+				{
+					GFX_SetMainShader(true);
+				}
+				else
+				{
+					GFX_SetMainShader(false);
+				}
+			}
 
 			SDL_GL_SwapWindow(sdl.window);
 
@@ -1168,7 +1176,7 @@ void GFX_SetPalette(Bitu start,Bitu count,GFX_PalEntry * entries) {
 
 	GLushort *pTempBuf = (GLushort*)alloca(count * sizeof(GLushort));
 
-    for (int i = 0; i < count; i++)
+    for (unsigned i = 0; i < count; i++)
     {
         // We are actually losing one bit of R&B color from native VGA.
         // Maybe I should keep it 32-bit? But Arm GPUs
@@ -1421,7 +1429,7 @@ inline const char *os_separator()
 }
 
 #if defined (WIN32)
-const char* sg_pathToShaders = ".\\";
+const char* sg_pathToShaders = ".\\Shaders\\";
 #else
 const char* sg_pathToShaders = "/usr/local/share/dosbox/";
 #endif // defined
@@ -1634,8 +1642,10 @@ static void GUI_StartUp(Section * sec) {
 	sdl.desktop.want_type=SCREEN_OPENGL;
 	sdl.opengl.bilinear=true;
 
+#ifndef WIN32
 	clock_getres(CLOCK_MONOTONIC_RAW, &sdl.clockRes);
     LOG_MSG("Clock resolution is %d seconds, %d nanoseconds", int(sdl.clockRes.tv_sec), int(sdl.clockRes.tv_nsec));
+#endif
 
 #if C_OPENGL
    if(sdl.desktop.want_type==SCREEN_OPENGL){ /* OPENGL is requested */
@@ -1974,6 +1984,7 @@ static void GUI_StartUp(Section * sec) {
 
 		glDeleteTextures(1, &splashTex);
 		CheckGL;
+
 	}
 
 	/* Get some Event handlers */
