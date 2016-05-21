@@ -43,6 +43,7 @@
 #include "ints/int10.h"
 #include "render.h"
 
+
 Config * control;
 MachineType machine;
 SVGACards svgaCard;
@@ -125,8 +126,9 @@ Bit32s ticksDone;
 Bit32u ticksScheduled;
 bool ticksLocked;
 
-
+#ifndef WIN32
 extern float CountMillisecs(timespec *pStart, timespec *pEnd);
+#endif
 
 static Bitu Normal_Loop(void) {
 	Bits ret;
