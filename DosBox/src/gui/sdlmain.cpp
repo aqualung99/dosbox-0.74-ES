@@ -730,30 +730,51 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 		}
 	} else {
 		sdl.clip.x=0;sdl.clip.y=0;
-		sdl.clip.w=(Bit16u)(sdl.draw.width*sdl.draw.scalex) + 2;
-		sdl.clip.h=(Bit16u)(sdl.draw.height*sdl.draw.scaley) + 2;
 
-		// Check for non-square pixels, and adjust
-		//
+		if (sdl.desktop.fullscreen)
+		{
+			sdl.clip.w = (Bit16u)(sdl.draw.width*sdl.draw.scalex);
+			sdl.clip.h=(Bit16u)(sdl.draw.height*sdl.draw.scaley);
+		}
+		else
+		{
+			sdl.clip.w=(Bit16u)(sdl.draw.width*sdl.draw.scalex) + 2;
+			sdl.clip.h=(Bit16u)(sdl.draw.height*sdl.draw.scaley) + 2;
+
+			// Check for non-square pixels, and adjust
+			//
+			float clipRatio = (float)sdl.clip.w / sdl.clip.h;
+			if (clipRatio > (4.0f / 3.0f))
+			{
+				// Pixels are vertically stretched tall & skinny
+				// We need extra height to accomodate
+				//
+				sdl.clip.h = (int)((sdl.clip.h * (clipRatio / (4.0f / 3.0f))) + 0.5f);
+			}
+			else if (clipRatio < (4.0f / 3.0f))
+			{
+				// Pixels are horizontally stretched short & fat
+				// We need extra width to accomodate
+				//
+				sdl.clip.w = (int)((sdl.clip.w * (clipRatio / (4.0f / 3.0f))) + 0.5f);
+			}
+		}
+
 		float clipRatio = (float)sdl.clip.w / sdl.clip.h;
-		if (clipRatio > (4.0f / 3.0f))
-		{
-			// Pixels are vertically stretched tall & skinny
-			// We need extra height to accomodate
-			//
-			sdl.clip.h = (int)((sdl.clip.h * (clipRatio / (4.0f / 3.0f))) + 0.5f);
-		}
-		else if (clipRatio < (4.0f / 3.0f))
-		{
-			// Pixels are horizontally stretched short & fat
-			// We need extra width to accomodate
-			//
-			sdl.clip.w = (int)((sdl.clip.w * (clipRatio / (4.0f / 3.0f))) + 0.5f);
-		}
-		clipRatio = (float)sdl.clip.w / sdl.clip.h;
 		sdl.windowAspectFor4x3 = (4.0f / 3.0f) / clipRatio;
 
-		SDL_SetWindowSize(sdl.window, sdl.clip.w, sdl.clip.h);
+		if (sdl.desktop.fullscreen)
+		{
+			SDL_SetWindowBordered(sdl.window, SDL_FALSE);
+			SDL_SetWindowSize(sdl.window, sdl.clip.w, sdl.clip.h);
+			SDL_SetWindowFullscreen(sdl.window, SDL_WINDOW_FULLSCREEN);
+		}
+		else
+		{
+			SDL_SetWindowFullscreen(sdl.window, 0);
+			SDL_SetWindowBordered(sdl.window, SDL_TRUE);
+			SDL_SetWindowSize(sdl.window, sdl.clip.w, sdl.clip.h);
+		}
 	}
 
 	if (sdl.bSmooth2Pass)
