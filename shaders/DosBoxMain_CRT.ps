@@ -149,6 +149,25 @@ void main() {
 
 	mul_res *= dotMaskWeights;
 
+/*
+	For Very High Resolution displays (4K+) instead of doing the
+	dotMaskWeights hack above you could try the code below
+	which draws individual RGB elements. It probably still needs
+	work.
+*/
+/*
+	// Break a texel up into thirds. Each third gets one 
+	// component of the color output (first third gets red,
+	// second third gets green, etc.)
+	//
+	float xCoord = 2.0 - floor(uv_ratio * 3.0);
+	float rMix = step(2.0, xCoord);
+	float gMix = step(1.0, xCoord) - rMix;
+	float bMix = 1.0 - rMix - gMix;
+
+	mul_res *= vec3(rMix, gMix, bMix);
+*/
+
 	// We desire the final output to be linear, because we already compensated for
 	// expected CRT gamma response. Therefore, we have to now compensate for the
 	// gamma response of the LCD monitor the user is actually using (LCD monitors
