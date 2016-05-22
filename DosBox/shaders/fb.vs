@@ -12,5 +12,5 @@ void main()
 	// Normalize
     texcoord = position * vec2(0.5,0.5) + vec2(0.5);
 	// Transform
-    texcoord *= texcoordScale;
+//    texcoord *= texcoordScale;
 }
