@@ -11,6 +11,4 @@ void main()
     gl_Position = vec4(position * vec2(aspectFix, 1.0), 0.0, 1.0);
 	// Normalize
     texcoord = position * vec2(0.5,0.5) + vec2(0.5);
-	// Transform
-    texcoord *= texcoordScale;
 }
