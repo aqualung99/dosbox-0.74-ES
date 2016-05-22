@@ -292,6 +292,7 @@ struct SDL_Block {
     GLuint fboBackbuffer;
 
     bool bSmooth2Pass;
+	bool use16bitTextures;
 
     int fboWidth, fboHeight;
 
@@ -316,9 +317,7 @@ struct SDL_Block {
 	} mouse;
 	SDL_Rect updateRects[1024];
 	Bitu num_joysticks;
-#if defined (WIN32)
-	bool using_windib;
-#endif
+
 	// state of alt-keys for certain special handlings
 	Bit32u laltstate;
 	Bit32u raltstate;
@@ -417,7 +416,14 @@ static void GFX_RebuildFramebufferTexture()
 
     // Set parameters on the texture backing
     //
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, sdl.fboWidth, sdl.fboHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+	if (sdl.use16bitTextures)
+	{
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, sdl.fboWidth, sdl.fboHeight, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 0);
+	}
+	else
+	{
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, sdl.fboWidth, sdl.fboHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+	}
     CheckGL;
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     CheckGL;
@@ -622,12 +628,6 @@ static void PauseDOSBox(bool pressed) {
 		}
 	}
 }
-
-#if defined (WIN32)
-bool GFX_SDLUsingWinDIB(void) {
-	return sdl.using_windib;
-}
-#endif
 
 /* Reset the screen with current values in the sdl structure */
 Bitu GFX_GetBestMode(Bitu flags) {
@@ -1251,20 +1251,27 @@ void GFX_SetPalette(Bitu start,Bitu count,GFX_PalEntry * entries) {
 	glBindTexture(GL_TEXTURE_2D, sdl.texPalette);
 	CheckGL;
 
-	GLushort *pTempBuf = (GLushort*)alloca(count * sizeof(GLushort));
+	if (sdl.use16bitTextures)
+	{
+		GLushort *pTempBuf = (GLushort*)alloca(count * sizeof(GLushort));
 
-    for (unsigned i = 0; i < count; i++)
-    {
-        // We are actually losing one bit of R&B color from native VGA.
-        // Maybe I should keep it 32-bit? But Arm GPUs
-        // need all the help they can get.
-        //
-        pTempBuf[i] = ((GLushort)(entries[i].r >> 3) << 11) |
-                      ((GLushort)(entries[i].g >> 2) << 5)  |
-                      ((GLushort)(entries[i].b >> 3) << 0);
-    }
+		for (unsigned i = 0; i < count; i++)
+		{
+			// We are losing one bit of Red & Blue color from native VGA.
+			// Not great (since we only have 6 bits to start with)
+			// but not the end of the world either.
+			//
+			pTempBuf[i] = ((GLushort)(entries[i].r >> 3) << 11) |
+						  ((GLushort)(entries[i].g >> 2) << 5)  |
+						  ((GLushort)(entries[i].b >> 3) << 0);
+		}
 
-	glTexSubImage2D(GL_TEXTURE_2D, 0, start, 0, count, 1, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, pTempBuf);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, start, 0, count, 1, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, pTempBuf);
+	}
+	else
+	{
+		glTexSubImage2D(GL_TEXTURE_2D, 0, start, 0, count, 1, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*)entries);
+	}
 	CheckGL;
 }
 
@@ -1707,6 +1714,8 @@ static void GUI_StartUp(Section * sec) {
 		sdl.desktop.full.height=768;
 #endif
 	}
+	sdl.use16bitTextures = section->Get_bool("use_16bit_textures");
+
 	sdl.mouse.autoenable=section->Get_bool("autolock");
 	if (!sdl.mouse.autoenable) SDL_ShowCursor(SDL_DISABLE);
 	sdl.mouse.autolock=false;
@@ -1857,7 +1866,14 @@ static void GUI_StartUp(Section * sec) {
 	CheckGL;
 	Bit32u *rgBlackPal = (Bit32u*)alloca(256 * sizeof(Bit32u));
 	memset(rgBlackPal, 0, 256 * sizeof(Bit32u));
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 256, 1, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, rgBlackPal);
+	if (sdl.use16bitTextures)
+	{
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 256, 1, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, rgBlackPal);
+	}
+	else
+	{
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgBlackPal);
+	}
 	CheckGL;
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	CheckGL;
@@ -1870,7 +1886,7 @@ static void GUI_StartUp(Section * sec) {
 
     sdl.texBackbuffer = -1;
     sdl.fboBackbuffer = -1;
-    sdl.bSmooth2Pass = section->Get_bool("smooth_2pass");
+    sdl.bSmooth2Pass = section->Get_bool("perform_2pass");
     if (sdl.bSmooth2Pass)
     {
         glGetIntegerv(GL_FRAMEBUFFER_BINDING, &sdl.originalBackbufferBinding);
@@ -2383,8 +2399,11 @@ void Config_Add_SDL() {
     Pstring = sdl_sec->Add_path("pixel_shader_pass2", Property::Changeable::OnlyAtStart, shaderPathBuf);
     Pstring->Set_help("File used as the fragment shader for the 2nd-pass renderer. Only used when 2nd pass is enabled. Bilinear filtering is enabled during pass 2 (unlike during pass 1.)");
 
-    Pbool = sdl_sec->Add_bool("smooth_2pass", Property::Changeable::OnlyAtStart, true);
+    Pbool = sdl_sec->Add_bool("perform_2pass", Property::Changeable::OnlyAtStart, true);
     Pbool->Set_help("Instead of rendering the native image directly to the framebuffer, render to a texture first. Then use bilinear interpolation to render that texture to the screen. If you aren't using a CRT shader, you probably want to set this to true. If you are using a CRT shader, you probably want to set this to false.");
+
+	Pbool = sdl_sec->Add_bool("use_16bit_textures", Property::Changeable::OnlyAtStart, false);
+	Pbool->Set_help("Use 16-bit textures (instead of 32-bit) where possible. Higher performance at the cost of slightly reduced color fidelity.");
 
 /*
 	Pbool = sdl_sec->Add_bool("usescancodes",Property::Changeable::DBoxAlways,true);

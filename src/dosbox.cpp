@@ -498,8 +498,12 @@ void DOSBOX_Init(void) {
 	Pstring->Set_help("Special configuration options for the device driver. This is usually the id of the device you want to use.\n"
 	                  "  See the README/Manual for more details.");
 
+#if defined (C_MT32EMU)
 #include "mt32options.h"
+#endif
+#if defined(C_FLUIDSYNTH)
 #include "fluidsynthoptions.h"
+#endif
 
 #if C_DEBUG
 	secprop=control->AddSection_prop("debug",&DEBUG_Init);
