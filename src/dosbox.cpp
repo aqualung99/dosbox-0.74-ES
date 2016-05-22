@@ -408,6 +408,11 @@ void DOSBOX_Init(void) {
 	secprop->AddInitFunction(&TIMER_Init);//done
 	secprop->AddInitFunction(&CMOS_Init);//done
 
+	secprop=control->AddSection_prop("render",&RENDER_Init,true);
+	Pint = secprop->Add_int("frameskip",Property::Changeable::DBoxAlways,0);
+	Pint->SetMinMax(0,10);
+	Pint->Set_help("How many frames DOSBox skips before drawing one.");
+
 	secprop=control->AddSection_prop("cpu",&CPU_Init,true);//done
 	const char* cores[] = { "auto",
 #if (C_DYNAMIC_X86) || (C_DYNREC)

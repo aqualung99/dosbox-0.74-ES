@@ -280,7 +280,10 @@ struct SDL_Block {
 
 	GLint fbPositionAddr;
 	GLint fbTexcoordScaleAddr;
+	GLint fbAspectFixAddr;
 	GLint fbTexUnitAddr;
+	GLint fbSourceSizeAddr;
+	GLint fbOneAddr;
 
 	GLuint texPalette;
     GLuint texBackbuffer;
@@ -1184,6 +1187,13 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
                 sdl.glUniform2f(sdl.fbTexcoordScaleAddr, (GLfloat)(sdl.draw.width + 2) / sdl.fboWidth, (GLfloat)(sdl.draw.height + 2) / sdl.fboHeight);
 //                sdl.glUniform2f(sdl.fbTexcoordScaleAddr, 1.0f, 1.0f);
                 CheckGL;
+				sdl.glUniform1f(sdl.fbAspectFixAddr, sdl.windowAspectFor4x3);
+				CheckGL;
+				sdl.glUniform4f(sdl.fbSourceSizeAddr, (GLfloat)(sdl.draw.width + 2), (GLfloat)(sdl.draw.height + 2), 0.0f, 0.0f);
+				CheckGL;
+//				sdl.glUniform2f(sdl.fbOneAddr, (GLfloat)(1.0f / (sdl.draw.width + 2)), (GLfloat)(1.0f / (sdl.draw.height)));
+				sdl.glUniform2f(sdl.fbOneAddr, (GLfloat)(1.0f / sdl.fboWidth), (GLfloat)(1.0f / sdl.fboHeight));
+				CheckGL;
 
                 sdl.glBindBuffer(GL_ARRAY_BUFFER, sdl.vertBuffer);
                 CheckGL;
@@ -1195,9 +1205,9 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
                 glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
                 CheckGL;
 
+/*
 				// Debug code, show the source texture
 				//
-/*
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
                 CheckGL;
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -1209,7 +1219,6 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
                 glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
                 CheckGL;
 */
-
 				sdl.glDisableVertexAttribArray(sdl.fbPositionAddr);
                 CheckGL;
 
@@ -1955,6 +1964,12 @@ static void GUI_StartUp(Section * sec) {
         CheckGL;
         sdl.fbTexcoordScaleAddr = sdl.glGetUniformLocation(sdl.progFB, "texcoordScale");
         CheckGL;
+		sdl.fbAspectFixAddr = sdl.glGetUniformLocation(sdl.progFB, "aspectFix");
+		CheckGL;
+		sdl.fbSourceSizeAddr = sdl.glGetUniformLocation(sdl.progFB, "sourceSize");
+		CheckGL;
+		sdl.fbOneAddr = sdl.glGetUniformLocation(sdl.progFB, "one");
+		CheckGL;
         sdl.fbTexUnitAddr = sdl.glGetUniformLocation(sdl.progFB, "texUnit");
         CheckGL;
 
@@ -2370,10 +2385,6 @@ void Config_Add_SDL() {
 
     Pbool = sdl_sec->Add_bool("smooth_2pass", Property::Changeable::OnlyAtStart, true);
     Pbool->Set_help("Instead of rendering the native image directly to the framebuffer, render to a texture first. Then use bilinear interpolation to render that texture to the screen. If you aren't using a CRT shader, you probably want to set this to true. If you are using a CRT shader, you probably want to set this to false.");
-
-	Pint = sdl_sec->Add_int("frameskip",Property::Changeable::DBoxAlways,0);
-	Pint->SetMinMax(0,10);
-	Pint->Set_help("How many frames DOSBox skips before drawing one.");
 
 /*
 	Pbool = sdl_sec->Add_bool("usescancodes",Property::Changeable::DBoxAlways,true);
