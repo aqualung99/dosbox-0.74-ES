@@ -443,28 +443,6 @@ Bitu GetKeyCode(SDL_Keysym keysym) {
 		/* Linux adds 8 to all scancodes */
 		else key-=8;
 #endif
-#if defined (WIN32)
-		switch (key) {
-			case 0x1c:	// ENTER
-			case 0x1d:	// CONTROL
-			case 0x35:	// SLASH
-			case 0x37:	// PRINTSCREEN
-			case 0x38:	// ALT
-			case 0x45:	// PAUSE
-			case 0x47:	// HOME
-			case 0x48:	// cursor UP
-			case 0x49:	// PAGE UP
-			case 0x4b:	// cursor LEFT
-			case 0x4d:	// cursor RIGHT
-			case 0x4f:	// END
-			case 0x50:	// cursor DOWN
-			case 0x51:	// PAGE DOWN
-			case 0x52:	// INSERT
-			case 0x53:	// DELETE
-				if (GFX_SDLUsingWinDIB()) key=scancode_map[(Bitu)keysym.sym];
-				break;
-		}
-#endif
 		return key;
 	} else {
 #if defined (WIN32)
