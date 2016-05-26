@@ -134,6 +134,7 @@ static LARGE_INTEGER sg_perfFreq;
 
 extern void GFX_UpdatePerf(float picTime, float cpuTime, float callbackTime, float windowTime, float timerTime, float delayTime);
 
+#ifdef WIN32
 static float GetElapsedTime(const LARGE_INTEGER &rStart, const LARGE_INTEGER &rEnd)
 {
 	LARGE_INTEGER tmp;
@@ -142,7 +143,7 @@ static float GetElapsedTime(const LARGE_INTEGER &rStart, const LARGE_INTEGER &rE
 
 	return float(double(tmp.QuadPart * 1000) / double(sg_perfFreq.QuadPart));
 }
-
+#endif
 
 static Bitu Normal_Loop(void) {
 	Bits ret;
@@ -235,7 +236,9 @@ static Bitu Normal_Loop(void) {
 			} else goto increaseticks;
 		}
 
+#ifdef WIN32
 		GFX_UpdatePerf(picTime, cpuTime, callbackTime, windowTime, timerTime, delayTime);
+#endif // WIN32
 	}
 increaseticks:
 //    LOG_MSG("PIC=%.1f  CPU=%.1f  CBack=%.1f GFX=%.1f Tick=%.1f", msPIC, msCPU, msCallback, msGFX, msTick);
@@ -325,8 +328,9 @@ increaseticks:
 		}
 	}
 
+#ifdef WIN32
 	GFX_UpdatePerf(picTime, cpuTime, callbackTime, windowTime, timerTime, delayTime);
-
+#endif // WIN32
 	return 0;
 }
 
