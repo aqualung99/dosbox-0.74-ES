@@ -31,7 +31,7 @@ bool MidiHandler_fluid::Open(const char *conf) {
 
     const char *szMidiType = section->Get_string("fluidsynth.midiType");
     fluid_settings_setstr(pSettings, "synth.midi-bank-select", szMidiType);
-
+	fluid_settings_setnum(pSettings, "synth.gain", 1);
     fluid_settings_setint(pSettings, "synth.cpu-cores", 1 + section->Get_bool("fluidsynth.thread") ? 1 : 0);
 
     synth = new_fluid_synth(pSettings);

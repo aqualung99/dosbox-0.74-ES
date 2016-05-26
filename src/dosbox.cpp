@@ -128,11 +128,30 @@ bool ticksLocked;
 
 #ifndef WIN32
 extern float CountMillisecs(timespec *pStart, timespec *pEnd);
+#else
+static LARGE_INTEGER sg_perfFreq;
 #endif
+
+extern void GFX_UpdatePerf(float picTime, float cpuTime, float callbackTime, float windowTime, float timerTime, float delayTime);
+
+static float GetElapsedTime(const LARGE_INTEGER &rStart, const LARGE_INTEGER &rEnd)
+{
+	LARGE_INTEGER tmp;
+
+	tmp.QuadPart = rEnd.QuadPart - rStart.QuadPart;
+
+	return float(double(tmp.QuadPart * 1000) / double(sg_perfFreq.QuadPart));
+}
+
 
 static Bitu Normal_Loop(void) {
 	Bits ret;
-/*
+#ifdef WIN32
+	QueryPerformanceFrequency(&sg_perfFreq);
+	LARGE_INTEGER startCount;
+	LARGE_INTEGER picCount, cpuCount, callbackCount, windowCount, timerCount, delayCount;
+	float picTime = 0.0f, cpuTime = 0.0f, callbackTime = 0.0f, windowTime = 0.0f, timerTime = 0.0f, delayTime = 0.0f;
+#else
 	timespec picRunQueueClockCounter;
 	timespec cpuDecoderClockCounter;
 	timespec gfxEventsClockCounter;
@@ -140,50 +159,83 @@ static Bitu Normal_Loop(void) {
 	timespec handlerClockCounter;
     timespec tmpClockCounter;
     float msPIC = 0, msCPU=0, msCallback=0, msGFX=0, msTick=0;
-*/
-	while (1) {
+#endif
 
-//		clock_gettime(CLOCK_MONOTONIC_RAW, &picRunQueueClockCounter);
+	while (1) {
+#ifdef WIN32
+		QueryPerformanceCounter(&startCount);
+#else
+		clock_gettime(CLOCK_MONOTONIC_RAW, &picRunQueueClockCounter);
+#endif
 
 		if (PIC_RunQueue()) {
 
-//            clock_gettime(CLOCK_MONOTONIC_RAW, &tmpClockCounter);
-//            msPIC += CountMillisecs(&picRunQueueClockCounter, &tmpClockCounter);
+#ifdef WIN32
+			QueryPerformanceCounter(&picCount);
+			picTime = GetElapsedTime(startCount, picCount);
+#else
+            clock_gettime(CLOCK_MONOTONIC_RAW, &tmpClockCounter);
+            msPIC += CountMillisecs(&picRunQueueClockCounter, &tmpClockCounter);
+#endif
 
 			ret=(*cpudecoder)();
 
-//			clock_gettime(CLOCK_MONOTONIC_RAW, &cpuDecoderClockCounter);
-//			msCPU += CountMillisecs(&tmpClockCounter, &cpuDecoderClockCounter);
+#ifdef WIN32
+			QueryPerformanceCounter(&cpuCount);
+			cpuTime = GetElapsedTime(picCount, cpuCount);
+#else
+			clock_gettime(CLOCK_MONOTONIC_RAW, &cpuDecoderClockCounter);
+			msCPU += CountMillisecs(&tmpClockCounter, &cpuDecoderClockCounter);
+#endif
 
 			if (GCC_UNLIKELY(ret<0)) return 1;
 			if (ret>0) {
 				Bitu blah=(*CallBack_Handlers[ret])();
-//				clock_gettime(CLOCK_MONOTONIC_RAW, &handlerClockCounter);
-//				msCallback += CountMillisecs(&cpuDecoderClockCounter, &handlerClockCounter);
-
+#ifdef WIN32
+				QueryPerformanceCounter(&callbackCount);
+				callbackTime = GetElapsedTime(cpuCount, callbackCount);
+#else
+				clock_gettime(CLOCK_MONOTONIC_RAW, &handlerClockCounter);
+				msCallback += CountMillisecs(&cpuDecoderClockCounter, &handlerClockCounter);
+#endif
 				if (GCC_UNLIKELY(blah)) return blah;
 			}
 #if C_DEBUG
 			if (DEBUG_ExitLoop()) return 0;
 #endif
 		} else {
-//            clock_gettime(CLOCK_MONOTONIC_RAW, &tmpClockCounter);
-//            msPIC += CountMillisecs(&picRunQueueClockCounter, &tmpClockCounter);
-
+#ifdef WIN32
+			QueryPerformanceCounter(&picCount);
+			picTime = GetElapsedTime(startCount, picCount);
+#else
+            clock_gettime(CLOCK_MONOTONIC_RAW, &tmpClockCounter);
+            msPIC += CountMillisecs(&picRunQueueClockCounter, &tmpClockCounter);
+#endif
 			GFX_Events();
 
-//			clock_gettime(CLOCK_MONOTONIC_RAW, &gfxEventsClockCounter);
-//			msGFX += CountMillisecs(&tmpClockCounter, &gfxEventsClockCounter);
+#ifdef WIN32
+			QueryPerformanceCounter(&windowCount);
+			windowTime = GetElapsedTime(picCount, windowCount);
+#else
+			clock_gettime(CLOCK_MONOTONIC_RAW, &gfxEventsClockCounter);
+			msGFX += CountMillisecs(&tmpClockCounter, &gfxEventsClockCounter);
+#endif
 
 			if (ticksRemain>0) {
 				TIMER_AddTick();
-
-//				clock_gettime(CLOCK_MONOTONIC_RAW, &timerTickClockCounter);
-//				msTick += CountMillisecs(&gfxEventsClockCounter, &timerTickClockCounter);
+#ifdef WIN32
+				QueryPerformanceCounter(&timerCount);
+				timerTime = GetElapsedTime(windowCount, timerCount);
+#else
+				clock_gettime(CLOCK_MONOTONIC_RAW, &timerTickClockCounter);
+				msTick += CountMillisecs(&gfxEventsClockCounter, &timerTickClockCounter);
+#endif
 
 				ticksRemain--;
 			} else goto increaseticks;
 		}
+
+		GFX_UpdatePerf(picTime, cpuTime, callbackTime, windowTime, timerTime, delayTime);
 	}
 increaseticks:
 //    LOG_MSG("PIC=%.1f  CPU=%.1f  CBack=%.1f GFX=%.1f Tick=%.1f", msPIC, msCPU, msCallback, msGFX, msTick);
@@ -263,11 +315,18 @@ increaseticks:
 		} else {
 			ticksAdded = 0;
 			SDL_Delay(1);
+#ifdef WIN32
+			QueryPerformanceCounter(&delayCount);
+			delayTime = GetElapsedTime(windowCount, delayCount);
+#endif
 			ticksDone -= GetTicks() - ticksNew;
 			if (ticksDone < 0)
 				ticksDone = 0;
 		}
 	}
+
+	GFX_UpdatePerf(picTime, cpuTime, callbackTime, windowTime, timerTime, delayTime);
+
 	return 0;
 }
 
