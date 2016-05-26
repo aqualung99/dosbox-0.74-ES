@@ -126,111 +126,65 @@ Bit32s ticksDone;
 Bit32u ticksScheduled;
 bool ticksLocked;
 
-#ifndef WIN32
-extern float CountMillisecs(timespec *pStart, timespec *pEnd);
-#else
-static LARGE_INTEGER sg_perfFreq;
-#endif
+static Uint64 sg_perfFreq;
 
 extern void GFX_UpdatePerf(float picTime, float cpuTime, float callbackTime, float windowTime, float timerTime, float delayTime);
 
-#ifdef WIN32
-static float GetElapsedTime(const LARGE_INTEGER &rStart, const LARGE_INTEGER &rEnd)
+static float GetElapsedTime(const Uint64 &rStart, const Uint64 &rEnd)
 {
-	LARGE_INTEGER tmp;
+	Uint64 tmp;
 
-	tmp.QuadPart = rEnd.QuadPart - rStart.QuadPart;
+	tmp = rEnd - rStart;
 
-	return float(double(tmp.QuadPart * 1000) / double(sg_perfFreq.QuadPart));
+	return float(double(tmp * 1000) / double(sg_perfFreq));
 }
 #endif
 
 static Bitu Normal_Loop(void) {
 	Bits ret;
-#ifdef WIN32
-	QueryPerformanceFrequency(&sg_perfFreq);
-	LARGE_INTEGER startCount;
-	LARGE_INTEGER picCount, cpuCount, callbackCount, windowCount, timerCount, delayCount;
+
+	sg_perfFreq = SDL_GetPerformanceFrequency();
+	Uint64 startCount;
+	Uint64 picCount, cpuCount, callbackCount, windowCount, timerCount, delayCount;
 	float picTime = 0.0f, cpuTime = 0.0f, callbackTime = 0.0f, windowTime = 0.0f, timerTime = 0.0f, delayTime = 0.0f;
-#else
-	timespec picRunQueueClockCounter;
-	timespec cpuDecoderClockCounter;
-	timespec gfxEventsClockCounter;
-	timespec timerTickClockCounter;
-	timespec handlerClockCounter;
-    timespec tmpClockCounter;
-    float msPIC = 0, msCPU=0, msCallback=0, msGFX=0, msTick=0;
-#endif
 
 	while (1) {
-#ifdef WIN32
-		QueryPerformanceCounter(&startCount);
-#else
-		clock_gettime(CLOCK_MONOTONIC_RAW, &picRunQueueClockCounter);
-#endif
+		startCount = SDL_GetPerformanceCounter();
 
 		if (PIC_RunQueue()) {
 
-#ifdef WIN32
-			QueryPerformanceCounter(&picCount);
+			picCount = SDL_GetPerformanceCounter();
 			picTime = GetElapsedTime(startCount, picCount);
-#else
-            clock_gettime(CLOCK_MONOTONIC_RAW, &tmpClockCounter);
-            msPIC += CountMillisecs(&picRunQueueClockCounter, &tmpClockCounter);
-#endif
 
 			ret=(*cpudecoder)();
 
-#ifdef WIN32
-			QueryPerformanceCounter(&cpuCount);
+			cpuCount = SDL_GetPerformanceCounter();
 			cpuTime = GetElapsedTime(picCount, cpuCount);
-#else
-			clock_gettime(CLOCK_MONOTONIC_RAW, &cpuDecoderClockCounter);
-			msCPU += CountMillisecs(&tmpClockCounter, &cpuDecoderClockCounter);
-#endif
 
 			if (GCC_UNLIKELY(ret<0)) return 1;
 			if (ret>0) {
 				Bitu blah=(*CallBack_Handlers[ret])();
-#ifdef WIN32
-				QueryPerformanceCounter(&callbackCount);
+				callbackCount = SDL_GetPerformanceCounter();
 				callbackTime = GetElapsedTime(cpuCount, callbackCount);
-#else
-				clock_gettime(CLOCK_MONOTONIC_RAW, &handlerClockCounter);
-				msCallback += CountMillisecs(&cpuDecoderClockCounter, &handlerClockCounter);
-#endif
 				if (GCC_UNLIKELY(blah)) return blah;
 			}
 #if C_DEBUG
 			if (DEBUG_ExitLoop()) return 0;
 #endif
 		} else {
-#ifdef WIN32
-			QueryPerformanceCounter(&picCount);
+			picCount = SDL_GetPerformanceCounter();
 			picTime = GetElapsedTime(startCount, picCount);
-#else
-            clock_gettime(CLOCK_MONOTONIC_RAW, &tmpClockCounter);
-            msPIC += CountMillisecs(&picRunQueueClockCounter, &tmpClockCounter);
-#endif
+
 			GFX_Events();
 
-#ifdef WIN32
-			QueryPerformanceCounter(&windowCount);
+			windowCount = SDL_GetPerformanceCounter();
 			windowTime = GetElapsedTime(picCount, windowCount);
-#else
-			clock_gettime(CLOCK_MONOTONIC_RAW, &gfxEventsClockCounter);
-			msGFX += CountMillisecs(&tmpClockCounter, &gfxEventsClockCounter);
-#endif
 
 			if (ticksRemain>0) {
 				TIMER_AddTick();
-#ifdef WIN32
-				QueryPerformanceCounter(&timerCount);
+
+				timerCount = SDL_GetPerformanceCounter();
 				timerTime = GetElapsedTime(windowCount, timerCount);
-#else
-				clock_gettime(CLOCK_MONOTONIC_RAW, &timerTickClockCounter);
-				msTick += CountMillisecs(&gfxEventsClockCounter, &timerTickClockCounter);
-#endif
 
 				ticksRemain--;
 			} else goto increaseticks;
@@ -318,10 +272,10 @@ increaseticks:
 		} else {
 			ticksAdded = 0;
 			SDL_Delay(1);
-#ifdef WIN32
-			QueryPerformanceCounter(&delayCount);
+
+			delayCount = SDL_GetPerformanceCounter();
 			delayTime = GetElapsedTime(windowCount, delayCount);
-#endif
+
 			ticksDone -= GetTicks() - ticksNew;
 			if (ticksDone < 0)
 				ticksDone = 0;
@@ -472,7 +426,7 @@ void DOSBOX_Init(void) {
 	secprop->AddInitFunction(&CMOS_Init);//done
 
 	secprop=control->AddSection_prop("render",&RENDER_Init,true);
-	Pint = secprop->Add_int("frameskip",Property::Changeable::DBoxAlways,0);
+	Pint = secprop->Add_int("frameskip",Property::Changeable::DBoxAlways,1);
 	Pint->SetMinMax(0,10);
 	Pint->Set_help("How many frames DOSBox skips before drawing one.");
 

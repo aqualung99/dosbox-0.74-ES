@@ -1199,17 +1199,6 @@ static void OutputStringGL(Bitu x,Bitu y,const char * text,Bit32u color,Bit32u c
 	}
 }
 
-#ifndef WIN32
-float CountMillisecs(timespec *pStart, timespec *pEnd)
-{
-    time_t secsElapsed = pEnd->tv_sec - pStart->tv_sec;
-    long long nsecsElapsed = secsElapsed * 1000000000L;
-    nsecsElapsed += (pEnd->tv_nsec - pStart->tv_nsec);
-
-    return (float)(nsecsElapsed / 1000000.0);
-}
-#endif
-
 
 unsigned GFX_GetFrameCount()
 {
@@ -1252,11 +1241,6 @@ void GFX_UpdatePerf(float picTime, float cpuTime, float callbackTime, float wind
 bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 	if (!sdl.active || sdl.updating)
 		return false;
-
-//    timespec lastStart = sdl.fpsClockCounter;
-//    clock_gettime(CLOCK_MONOTONIC_RAW, &sdl.fpsClockCounter);
-//    float milliElapsed = CountMillisecs(&lastStart, &sdl.fpsClockCounter);
-//    float fps = 1000.0f / milliElapsed;
 
 	Uint64 curTime = SDL_GetPerformanceCounter();
 	Uint64 diffTime = curTime - sg_fpsCounter;
