@@ -303,8 +303,12 @@ struct SDL_Block {
 	timespec clockRes;
     timespec fpsClockCounter;
     timespec vgaClockCounter;
+#else
+	LONGLONG perfCPUTime;
+	LONGLONG perfPICTime;
+	LONGLONG perfRenderTime;
 #endif
-
+	bool bShowPerf;
 
 //	SDL_Renderer * renderer;
 	SDL_cond *cond;
@@ -471,9 +475,110 @@ struct DrawRectData
     float r, g, b, a;
 };
 
+extern Bit8u int10_font_14[256 * 14];
+
 static const int MAX_RECT_BUFFER = 32;
 static DrawRectData sg_rectBuffer[MAX_RECT_BUFFER];
 static int sg_nextRectBuffer = 0;
+
+static const int gc_warningTexWidth = 640;
+static const int gc_warningTexHeight = 400;
+static const int gc_warningFontHeight = 14;
+static const int gc_warningFontWidth = 8;
+static const int gc_warningTexBytesPerPixel = 4;
+
+static const GLfloat gc_vertex_buffer_data[] = {
+    -1.0f,  1.0f,
+    -1.0f, -1.0f,
+     1.0f,  1.0f,
+     1.0f, -1.0f
+};
+static const GLubyte gc_element_buffer_data[] = { 0, 1, 2, 3 };
+static const unsigned gc_tabSize = 8;
+static unsigned char logo[32*32*4]= {
+#include "dosbox_logo.h"
+};
+#include "dosbox_splash.h"
+
+static GLuint sg_PerfStatsTexture = -1;
+static GLubyte *sg_PerfStatsBuffer = NULL;
+
+static unsigned sg_GFXUpdateCounter = 0;
+static unsigned sg_mainLoopCount = 0;
+static float sg_picTime = 0.0f, sg_cpuTime = 0.0f, sg_callbackTime = 0.0f, sg_windowTime = 0.0f, sg_timerTime = 0.0f, sg_delayTime = 0.0f;
+static float sg_picAbs = 0.0f, sg_cpuAbs = 0.0f, sg_callbackAbs = 0.0f, sg_windowAbs = 0.0f, sg_timerAbs = 0.0f, sg_delayAbs = 0.0f;
+static Uint64 sg_fpsCounter;
+static float sg_fps = 0.0f;
+
+
+static inline void OutputCharGL(Bitu x, Bitu y, char c, Bit32u colForeground, Bit32u colBackground, GLubyte *pDestBuffer)
+{
+	Bit32u * draw=(Bit32u*)(((Bit8u *)pDestBuffer)+((y)*(gc_warningTexWidth * gc_warningTexBytesPerPixel)))+x;
+
+	Bit8u *font = &int10_font_14[c * 14];
+	Bitu i,j;
+	Bit32u * draw_line=draw;
+
+	for (i=0;i<14;i++) 
+	{
+		Bit8u map=*font++;
+		for (j=0;j<8;j++) 
+		{
+			if (map & 0x80) 
+			{
+				*((Bit32u*)(draw_line+j))=colForeground; 
+			}
+			else 
+			{
+				*((Bit32u*)(draw_line+j))=colBackground;
+			}
+			map <<= 1;
+		}
+
+		draw_line += (gc_warningTexWidth * gc_warningTexBytesPerPixel) / gc_warningTexBytesPerPixel;
+	}
+}
+
+void GFX_Puts(char *szBuffer, GLubyte *sfcBuffer, int startX, int startY)
+{
+	int nextX = startX, nextY = startY;
+
+	while (szBuffer && (*szBuffer))
+	{
+		// Handle explicit line breaks
+		//
+		if (*szBuffer == '\n')
+		{
+			nextX = startX;
+			nextY += gc_warningFontHeight;
+		}
+		else if (*szBuffer == '\t')
+		{
+			ldiv_t result = ldiv(nextX, gc_warningFontWidth * gc_tabSize);
+
+			nextX += (gc_tabSize * gc_warningFontWidth) - result.rem;
+		}
+		else if (*szBuffer == ' ')
+		{
+			nextX += gc_warningFontWidth;
+		}
+		else
+		{
+			OutputCharGL(nextX, nextY, *szBuffer, 0xFFFFFFFF, 0xC0000000, sfcBuffer);
+			nextX += gc_warningFontWidth;
+		}
+
+		// Auto-wrap
+		//
+		if (nextX > (gc_warningTexWidth - gc_warningFontWidth))
+		{
+			nextX = startX;
+			nextY += gc_warningFontHeight;
+		}
+
+		++szBuffer;
+	};
+}
 
 static void GFX_DrawRect(float x1, float y1, float x2, float y2, float r, float g, float b, float a)
 {
@@ -540,6 +645,89 @@ static void GFX_DrawAllRectBuffers()
     sdl.glDeleteBuffers(1, &vbo);
 
     sg_nextRectBuffer = 0;
+}
+
+static void ShowPerfStats()
+{
+	if (sdl.bShowPerf == false)
+	{
+		return;
+	}
+
+	if (sg_PerfStatsTexture == -1)
+	{
+		glGenTextures(1, &sg_PerfStatsTexture);
+	}
+
+	if (sg_PerfStatsBuffer)
+	{
+		memset(sg_PerfStatsBuffer, 0, gc_warningTexWidth * gc_warningTexHeight * gc_warningTexBytesPerPixel);
+	}
+	else
+	{
+		sg_PerfStatsBuffer = (GLubyte*)calloc(gc_warningTexWidth * gc_warningTexHeight * gc_warningTexBytesPerPixel, sizeof(GLubyte));
+	}
+
+	char *szLineBuffer = (char *)alloca(1024);
+
+	sprintf(szLineBuffer, "%d Loops:\tAverage\tTotal\nPIC      :\t%0.2f\t%0.2f\nCPU      :\t%0.2f\t%0.2f\nCALLBACKS:\t%0.2f\t%0.2f\nWND EVTS :\t%0.2f\t%0.2f\nTIMERS   :\t%0.2f\t%0.2f\nDELAY    :\t%0.2f\t%0.2f\n\nFPS: %0.2f", 
+			sg_mainLoopCount + 1, 
+			sg_picTime, sg_picAbs,
+			sg_cpuTime, sg_cpuAbs,
+			sg_callbackTime, sg_callbackAbs,
+			sg_windowTime, sg_windowAbs,
+			sg_timerTime, sg_timerAbs,
+			sg_delayTime, sg_delayAbs,
+			sg_fps);
+
+	GFX_Puts(szLineBuffer, sg_PerfStatsBuffer, 0, 0);
+
+	if (sg_PerfStatsTexture != -1)
+	{
+		sdl.glActiveTexture(GL_TEXTURE0);
+		CheckGL;
+		glBindTexture(GL_TEXTURE_2D, sg_PerfStatsTexture);
+		CheckGL;
+
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gc_warningTexWidth, gc_warningTexHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, sg_PerfStatsBuffer);
+		CheckGL;
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		CheckGL;
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		CheckGL;
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
+		CheckGL;
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
+		CheckGL;
+		glEnable(GL_BLEND);
+		CheckGL;
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		CheckGL;
+		sdl.glUseProgram(sdl.progSimple);
+		CheckGL;
+		glEnable(GL_BLEND);
+		CheckGL;
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		CheckGL;
+
+		sdl.glUniform1f(sdl.simpleFadeFactorAddr, 1.0);
+		CheckGL;
+		sdl.glUniform1i(sdl.simpleTexUnitAddr, 0);
+		CheckGL;
+
+		sdl.glEnableVertexAttribArray(sdl.simplePositionAddr);
+		CheckGL;
+
+		glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
+		CheckGL;
+
+		sdl.glDisableVertexAttribArray(sdl.simplePositionAddr);
+		CheckGL;
+
+		glDisable(GL_BLEND);
+		CheckGL;
+	}
 }
 
 
@@ -992,6 +1180,25 @@ static void SwitchFullScreen(bool pressed) {
 	GFX_SwitchFullScreen();
 }
 
+static void OutputStringGL(Bitu x,Bitu y,const char * text,Bit32u color,Bit32u color2,GLubyte* pDestBuffer) {
+	Bit32u * draw=(Bit32u*)(((Bit8u *)pDestBuffer)+((y)*(gc_warningTexWidth * gc_warningTexBytesPerPixel)))+x;
+	while (*text) {
+		Bit8u * font=&int10_font_14[(*text)*14];
+		Bitu i,j;
+		Bit32u * draw_line=draw;
+		for (i=0;i<14;i++) {
+			Bit8u map=*font++;
+			for (j=0;j<8;j++) {
+				if (map & 0x80) *((Bit32u*)(draw_line+j))=color; else *((Bit32u*)(draw_line+j))=color2;
+				map<<=1;
+			}
+			draw_line+=(gc_warningTexWidth * gc_warningTexBytesPerPixel)/4;
+		}
+		text++;
+		draw+=8;
+	}
+}
+
 #ifndef WIN32
 float CountMillisecs(timespec *pStart, timespec *pEnd)
 {
@@ -1003,7 +1210,44 @@ float CountMillisecs(timespec *pStart, timespec *pEnd)
 }
 #endif
 
-static unsigned sg_GFXUpdateCounter = 0;
+
+unsigned GFX_GetFrameCount()
+{
+	return sg_GFXUpdateCounter;
+}
+
+
+void AddToRollingAverage(float *pInOutAverage, float newVal)
+{
+	if (*pInOutAverage == 0.0f)
+	{
+		*pInOutAverage = newVal;
+	}
+	else
+	{
+		*pInOutAverage = ((*pInOutAverage) * 0.95f) + (newVal * 0.05f);
+	}
+}
+
+void GFX_UpdatePerf(float picTime, float cpuTime, float callbackTime, float windowTime, float timerTime, float delayTime)
+{
+	AddToRollingAverage(&sg_picTime, picTime);
+	AddToRollingAverage(&sg_cpuTime, cpuTime);
+	AddToRollingAverage(&sg_callbackTime, callbackTime);
+	AddToRollingAverage(&sg_windowTime, windowTime);
+	AddToRollingAverage(&sg_timerTime, timerTime);
+	AddToRollingAverage(&sg_delayTime, delayTime);
+
+	sg_picAbs += picTime;
+	sg_cpuAbs += cpuTime;
+	sg_callbackAbs += callbackTime;
+	sg_windowAbs += windowTime;
+	sg_timerAbs += timerTime;
+	sg_delayAbs += delayTime;
+
+	sg_mainLoopCount++;
+}
+
 
 bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 	if (!sdl.active || sdl.updating)
@@ -1014,7 +1258,23 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 //    float milliElapsed = CountMillisecs(&lastStart, &sdl.fpsClockCounter);
 //    float fps = 1000.0f / milliElapsed;
 
+	Uint64 curTime = SDL_GetPerformanceCounter();
+	Uint64 diffTime = curTime - sg_fpsCounter;
+	sg_fpsCounter = curTime;
+	double elapsedSecs = double(diffTime) / double(SDL_GetPerformanceFrequency());
+
+	sg_fps = (float)(1.0 / elapsedSecs);
+
 	sg_GFXUpdateCounter++;
+	sg_mainLoopCount = 0;
+
+	sg_picAbs = 0.0f;
+	sg_cpuAbs = 0.0f;
+	sg_callbackAbs = 0.0f;
+	sg_windowAbs = 0.0f;
+	sg_timerAbs = 0.0f;
+	sg_delayAbs = 0.0f;
+
 //    if (!(sg_GFXUpdateCounter & 0x01))
 //    {
         // LOG_MSG("%.1f FPS", fps);
@@ -1221,15 +1481,17 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 */
 				sdl.glDisableVertexAttribArray(sdl.fbPositionAddr);
                 CheckGL;
+			}
 
-				if (sdl.draw.bpp == 8)
-				{
-					GFX_SetMainShader(true);
-				}
-				else
-				{
-					GFX_SetMainShader(false);
-				}
+			ShowPerfStats();
+
+			if (sdl.draw.bpp == 8)
+			{
+				GFX_SetMainShader(true);
+			}
+			else
+			{
+				GFX_SetMainShader(false);
 			}
 
 			SDL_GL_SwapWindow(sdl.window);
@@ -1382,31 +1644,6 @@ static void SetPriority(PRIORITY_LEVELS level) {
 #endif
 	default:
 		break;
-	}
-}
-
-extern Bit8u int10_font_14[256 * 14];
-
-static const int gc_warningTexWidth = 640;
-static const int gc_warningTexHeight = 400;
-static const int gc_warningTexBytesPerPixel = 4;
-
-static void OutputStringGL(Bitu x,Bitu y,const char * text,Bit32u color,Bit32u color2,GLubyte* pDestBuffer) {
-	Bit32u * draw=(Bit32u*)(((Bit8u *)pDestBuffer)+((y)*(gc_warningTexWidth * gc_warningTexBytesPerPixel)))+x;
-	while (*text) {
-		Bit8u * font=&int10_font_14[(*text)*14];
-		Bitu i,j;
-		Bit32u * draw_line=draw;
-		for (i=0;i<14;i++) {
-			Bit8u map=*font++;
-			for (j=0;j<8;j++) {
-				if (map & 0x80) *((Bit32u*)(draw_line+j))=color; else *((Bit32u*)(draw_line+j))=color2;
-				map<<=1;
-			}
-			draw_line+=(gc_warningTexWidth * gc_warningTexBytesPerPixel)/4;
-		}
-		text++;
-		draw+=8;
 	}
 }
 
@@ -1604,18 +1841,6 @@ static GLuint LoadShader(const char *szShaderFile, GLenum shaderType)
 	}
 }
 
-static const GLfloat gc_vertex_buffer_data[] = {
-    -1.0f,  1.0f,
-    -1.0f, -1.0f,
-     1.0f,  1.0f,
-     1.0f, -1.0f
-};
-static const GLubyte gc_element_buffer_data[] = { 0, 1, 2, 3 };
-
-static unsigned char logo[32*32*4]= {
-#include "dosbox_logo.h"
-};
-#include "dosbox_splash.h"
 
 //extern void UI_Run(bool);
 static void GUI_StartUp(Section * sec) {
@@ -1715,7 +1940,7 @@ static void GUI_StartUp(Section * sec) {
 #endif
 	}
 	sdl.use16bitTextures = section->Get_bool("use_16bit_textures");
-
+	sdl.bShowPerf = section->Get_bool("show_perf_counters");
 	sdl.mouse.autoenable=section->Get_bool("autolock");
 	if (!sdl.mouse.autoenable) SDL_ShowCursor(SDL_DISABLE);
 	sdl.mouse.autolock=false;
@@ -2405,11 +2630,14 @@ void Config_Add_SDL() {
 	Pbool = sdl_sec->Add_bool("use_16bit_textures", Property::Changeable::OnlyAtStart, false);
 	Pbool->Set_help("Use 16-bit textures (instead of 32-bit) where possible. Higher performance at the cost of slightly reduced color fidelity.");
 
+	Pbool = sdl_sec->Add_bool("show_perf_counters", Property::Changeable::DBoxAlways, false);
+	Pbool->Set_help("Show debug overlay with performance stats.");
 /*
 	Pbool = sdl_sec->Add_bool("usescancodes",Property::Changeable::DBoxAlways,true);
 	Pbool->Set_help("Avoid usage of symkeys, might not work on all operating systems.");
 */
 }
+
 
 static void show_warning(char const * const message) {
 	bool textonly = true;
