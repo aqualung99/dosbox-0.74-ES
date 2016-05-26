@@ -138,7 +138,6 @@ static float GetElapsedTime(const Uint64 &rStart, const Uint64 &rEnd)
 
 	return float(double(tmp * 1000) / double(sg_perfFreq));
 }
-#endif
 
 static Bitu Normal_Loop(void) {
 	Bits ret;
@@ -190,12 +189,9 @@ static Bitu Normal_Loop(void) {
 			} else goto increaseticks;
 		}
 
-#ifdef WIN32
 		GFX_UpdatePerf(picTime, cpuTime, callbackTime, windowTime, timerTime, delayTime);
-#endif // WIN32
 	}
 increaseticks:
-//    LOG_MSG("PIC=%.1f  CPU=%.1f  CBack=%.1f GFX=%.1f Tick=%.1f", msPIC, msCPU, msCallback, msGFX, msTick);
 
 	if (GCC_UNLIKELY(ticksLocked)) {
 		ticksRemain=5;
@@ -282,9 +278,9 @@ increaseticks:
 		}
 	}
 
-#ifdef WIN32
+
 	GFX_UpdatePerf(picTime, cpuTime, callbackTime, windowTime, timerTime, delayTime);
-#endif // WIN32
+
 	return 0;
 }
 

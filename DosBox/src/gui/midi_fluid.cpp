@@ -21,7 +21,7 @@ bool MidiHandler_fluid::Open(const char *conf) {
 	Section_prop *section = static_cast<Section_prop *>(control->GetSection("midi"));
 	const char *sfFile = section->Get_string("fluidsynth.soundFontFile");
 
-    fluid_settings_t* pSettings = new_fluid_settings();
+    pSettings = new_fluid_settings();
 
     fluid_settings_setnum(pSettings, "synth.sample-rate", (double)section->Get_int("fluidsynth.sampleRate"));
 
@@ -40,7 +40,9 @@ bool MidiHandler_fluid::Open(const char *conf) {
     if (soundFontID == -1)
     {
         delete_fluid_synth(synth);
+        synth = NULL;
         delete_fluid_settings(pSettings);
+        pSettings = NULL;
         LOG_MSG("FluidSynth: Could not open SoundFont file \"%s\"! FluidSynth disabled!", sfFile);
         return false;
     }
@@ -107,6 +109,7 @@ void MidiHandler_fluid::Close(void) {
     delete_fluid_settings(pSettings);
 
 	synth = NULL;
+	pSettings = NULL;
 	open = false;
 }
 

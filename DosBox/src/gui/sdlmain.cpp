@@ -218,6 +218,7 @@ struct SDL_Block {
 	PFNGLBINDBUFFERPROC glBindBuffer;
 	PFNGLBUFFERDATAPROC glBufferData;
 	PFNGLDELETEPROGRAMPROC glDeleteProgram;
+	PFNGLDELETESHADERPROC glDeleteShader;
 	PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation;
 	PFNGLGETATTRIBLOCATIONPROC glGetAttribLocation;
 	PFNGLUSEPROGRAMPROC glUseProgram;
@@ -519,16 +520,16 @@ static inline void OutputCharGL(Bitu x, Bitu y, char c, Bit32u colForeground, Bi
 	Bitu i,j;
 	Bit32u * draw_line=draw;
 
-	for (i=0;i<14;i++) 
+	for (i=0;i<14;i++)
 	{
 		Bit8u map=*font++;
-		for (j=0;j<8;j++) 
+		for (j=0;j<8;j++)
 		{
-			if (map & 0x80) 
+			if (map & 0x80)
 			{
-				*((Bit32u*)(draw_line+j))=colForeground; 
+				*((Bit32u*)(draw_line+j))=colForeground;
 			}
-			else 
+			else
 			{
 				*((Bit32u*)(draw_line+j))=colBackground;
 			}
@@ -670,8 +671,8 @@ static void ShowPerfStats()
 
 	char *szLineBuffer = (char *)alloca(1024);
 
-	sprintf(szLineBuffer, "%d Loops:\tAverage\tTotal\nPIC      :\t%0.2f\t%0.2f\nCPU      :\t%0.2f\t%0.2f\nCALLBACKS:\t%0.2f\t%0.2f\nWND EVTS :\t%0.2f\t%0.2f\nTIMERS   :\t%0.2f\t%0.2f\nDELAY    :\t%0.2f\t%0.2f\n\nFPS: %0.2f", 
-			sg_mainLoopCount + 1, 
+	sprintf(szLineBuffer, "%d Loops:\tAverage\tTotal\nPIC      :\t%0.2f\t%0.2f\nCPU      :\t%0.2f\t%0.2f\nCALLBACKS:\t%0.2f\t%0.2f\nWND EVTS :\t%0.2f\t%0.2f\nTIMERS   :\t%0.2f\t%0.2f\nDELAY    :\t%0.2f\t%0.2f\n\nFPS: %0.2f",
+			sg_mainLoopCount + 1,
 			sg_picTime, sg_picAbs,
 			sg_cpuTime, sg_cpuAbs,
 			sg_callbackTime, sg_callbackAbs,
@@ -1415,6 +1416,9 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
                 glViewport(0,0, sdl.clip.w, sdl.clip.h);
                 CheckGL;
 
+                glClear(GL_COLOR_BUFFER_BIT);
+                CheckGL;
+
                 sdl.glActiveTexture(GL_TEXTURE0);
                 CheckGL;
                 glBindTexture(GL_TEXTURE_2D, sdl.texBackbuffer);
@@ -1556,6 +1560,42 @@ static void GUI_ShutDown(Section * /*sec*/) {
 		{
 			sdl.glDeleteProgram(sdl.progPalette);
 		}
+		if (sdl.progFB)
+        {
+            sdl.glDeleteProgram(sdl.progFB);
+        }
+		if (sdl.progNoPalette)
+        {
+            sdl.glDeleteProgram(sdl.progNoPalette);
+        }
+        if (sdl.psFB)
+        {
+            sdl.glDeleteShader(sdl.psFB);
+        }
+        if (sdl.psNoPalette)
+        {
+            sdl.glDeleteShader(sdl.psNoPalette);
+        }
+        if (sdl.psPalette)
+        {
+            sdl.glDeleteShader(sdl.psPalette);
+        }
+        if (sdl.psSimple)
+        {
+            sdl.glDeleteShader(sdl.psSimple);
+        }
+        if (sdl.vsFB)
+        {
+            sdl.glDeleteShader(sdl.vsFB);
+        }
+        if (sdl.vsPalette)
+        {
+            sdl.glDeleteShader(sdl.vsPalette);
+        }
+        if (sdl.vsSimple)
+        {
+            sdl.glDeleteShader(sdl.vsSimple);
+        }
 		if (sdl.texPalette)
 		{
 			glDeleteTextures(1, &sdl.texPalette);
@@ -1564,6 +1604,26 @@ static void GUI_ShutDown(Section * /*sec*/) {
 		{
 			glDeleteTextures(1, &sdl.opengl.texture);
 		}
+		if (sdl.texBackbuffer)
+        {
+            glDeleteTextures(1, &sdl.texBackbuffer);
+        }
+        if (sg_PerfStatsTexture != -1)
+        {
+            glDeleteTextures(1, &sg_PerfStatsTexture);
+        }
+        if (sdl.fboBackbuffer)
+        {
+            sdl.glDeleteFramebuffers(1, &sdl.fboBackbuffer);
+        }
+        if (sdl.vertBuffer)
+        {
+            sdl.glDeleteBuffers(1, &sdl.vertBuffer);
+        }
+        if (sdl.idxBuffer)
+        {
+            sdl.glDeleteBuffers(1, &sdl.idxBuffer);
+        }
 		if (sdl.context)
 		{
 			SDL_GL_DeleteContext(sdl.context);
@@ -1657,7 +1717,7 @@ static GLuint CreateProgram(GLuint vertexShader, GLuint fragmentShader)
 		szLogBuffer[0] = '\0';
 		sdl.glGetProgramInfoLog(prog, logLength, NULL, szLogBuffer);
 		CheckGL;
-		LOG_MSG("Results of linking: %s", szLogBuffer);
+		LOG_MSG("Linking: %s", szLogBuffer);
 		free(szLogBuffer);
 	}
 	if (linkResult == GL_TRUE)
@@ -1673,7 +1733,7 @@ static GLuint CreateProgram(GLuint vertexShader, GLuint fragmentShader)
 		CheckGL;
 
 		char *progSummary = (char*)malloc(64 * 1024);
-		strcpy(progSummary, "Shaders linked successfully.\nAttributes found:\n");
+		strcpy(progSummary, "Shaders linked successfully.\tAttributes found:\n");
 
 		for (int i = 0; i < numActiveAttribs; i++)
 		{
@@ -1690,7 +1750,7 @@ static GLuint CreateProgram(GLuint vertexShader, GLuint fragmentShader)
 			strcat(progSummary, "\n");
 		}
 
-		strcat(progSummary, "Uniforms found:\n");
+		strcat(progSummary, "\t\t\t\tUniforms found:\n");
 		for (int i = 0; i < numActiveUniforms; i++)
 		{
 			GLint arraySize = 0;
@@ -1796,7 +1856,7 @@ static GLuint LoadShader(const char *szShaderFile, GLenum shaderType)
 		char *szLogBuffer = (char*)malloc(logLength);
 		szLogBuffer[0] = '\0';
 		sdl.glGetShaderInfoLog(shaderProg, logLength, NULL, szLogBuffer);
-		LOG_MSG("Results of compiling \"%s\": %s", szShaderFile, szLogBuffer);
+		LOG_MSG("Compiling \"%s\": %s", szShaderFile, szLogBuffer);
 		free(szLogBuffer);
 	}
 	else
@@ -1997,6 +2057,7 @@ static void GUI_StartUp(Section * sec) {
 	sdl.glBindBuffer = (PFNGLBINDBUFFERPROC)SDL_GL_GetProcAddress("glBindBuffer");
 	sdl.glBufferData = (PFNGLBUFFERDATAPROC)SDL_GL_GetProcAddress("glBufferData");
 	sdl.glDeleteProgram = (PFNGLDELETEPROGRAMPROC)SDL_GL_GetProcAddress("glDeleteProgram");
+	sdl.glDeleteShader = (PFNGLDELETESHADERPROC)SDL_GL_GetProcAddress("glDeleteShader");
 	sdl.glGetUniformLocation = (PFNGLGETUNIFORMLOCATIONPROC)SDL_GL_GetProcAddress("glGetUniformLocation");
 	sdl.glGetAttribLocation = (PFNGLGETATTRIBLOCATIONPROC)SDL_GL_GetProcAddress("glGetAttribLocation");
 	sdl.glUseProgram = (PFNGLUSEPROGRAMPROC)SDL_GL_GetProcAddress("glUseProgram");
