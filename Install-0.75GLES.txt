@@ -1,6 +1,9 @@
 
 Step 1: Install SDL 2.0.4
-
+  sudo apt-get install sdl2
+     - or -
+  sudo pacman -S sdl2
+     - or -
   a) Grab the source code here: 
       https://www.libsdl.org/release/SDL2-2.0.4.tar.gz
   b) Extract to a dev folder
@@ -14,22 +17,10 @@ Step 1: Install SDL 2.0.4
 	./configure --enable-video-wayland=no --enable-video-opengl=no --enable-alsa=no --enable-diskaudio=no --enable-video-mir=no --enable-directx=no --enable-nas=no --enable-video-opengles1=no
 	This makes sure we use X11, gles2, and pulseaudio (the only core libraries that I could get to work properly.)
   f) $ make -j4
-      Or, use "make -j8" if you have 8 cores :)
+      Or, use "make -j8" if you have 8 cores
   g) $ sudo make install
 
- 
-(Optional) Step 2: Install SDL_Sound
 
-  a) Install Mercurial
-      $ sudo apt-get install mercurial
-  b) Go to your dev folder
-  c) $ hg clone http://hg.icculus.org/icculus/SDL_sound/
-  d) $ cd SDL_sound
-  e) $ ./bootstrap
-  f) $ ./configure
-  g) $ make -j4
-  h) $ sudo make install
-  
   
  (Optional) Step 3: Install SDL_Net
  
@@ -66,14 +57,13 @@ Step 1: Install SDL 2.0.4
   g) $ sudo make install
  
  
- Step 6: Install DosBox 0.75
+ Step 6: Install DosBox 0.74-ES
  
-  a) Install svn
-       I use "kdesvn" because I prefer a GUI
-  b) Source is here for now: 
-       https://starlore.unfuddle.com/svn/starlore_joel/DosBox
-  d) Checkout somewhere
+  a) Install git
+  b) $ git clone https://github.com/aqualung99/dosbox-0.74-ES.git
   e) $ ./autogen.sh
   f) $ ./configure
   g) $ make -j4
   h) $ sudo make install
+
+$ dosbox
