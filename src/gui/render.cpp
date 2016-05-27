@@ -129,6 +129,22 @@ void RENDER_EndUpdate( bool abort ) {
 		return;
 	RENDER_DrawLine = RENDER_EmptyLineHandler;
 	GFX_EndUpdate(NULL);
+	/*
+	if (GCC_UNLIKELY(CaptureState & (CAPTURE_IMAGE|CAPTURE_VIDEO))) {
+		Bitu pitch, flags;
+		flags = 0;
+		if (render.src.dblw != render.src.dblh) {
+			if (render.src.dblw) flags|=CAPTURE_FLAG_DBLW;
+			if (render.src.dblh) flags|=CAPTURE_FLAG_DBLH;
+		}
+		float fps = render.src.fps;
+		pitch = render.scale.cachePitch;
+		if (render.frameskip.max)
+			fps /= 1+render.frameskip.max;
+		CAPTURE_AddImage( render.src.width, render.src.height, render.src.bpp, pitch,
+			flags, fps, (Bit8u *)&scalerSourceCache, (Bit8u*)&render.pal.rgb );
+	}
+	*/
 	render.updating=false;
 }
 

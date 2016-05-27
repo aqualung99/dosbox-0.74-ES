@@ -56,6 +56,7 @@
 #include "keyboard.h"
 #include "cpu.h"
 #include "cross.h"
+#include "hardware.h"
 #include "control.h"
 
 #define MAPPERFILE "mapper-" VERSION ".map"
@@ -165,7 +166,7 @@ struct SDL_Block {
 		} window;
 		Bit8u bpp;
 		bool fullscreen;
-		bool doublebuf;
+//		bool doublebuf;
 		SCREEN_TYPES type;
 		SCREEN_TYPES want_type;
 	} desktop;
@@ -240,6 +241,7 @@ struct SDL_Block {
 	PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer;
 	PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
 	PFNGLCHECKFRAMEBUFFERSTATUSPROC glCheckFramebufferStatus;
+//	PFNGLREADPIXELSPROC glReadPixels;
 
 	GLuint vsSimple;
 	GLuint psSimple;
@@ -300,16 +302,9 @@ struct SDL_Block {
 	float windowAspectFor4x3;
 	unsigned nextRenderLineNum;
 
-#ifndef WIN32
-	timespec clockRes;
-    timespec fpsClockCounter;
-    timespec vgaClockCounter;
-#else
-	LONGLONG perfCPUTime;
-	LONGLONG perfPICTime;
-	LONGLONG perfRenderTime;
-#endif
 	bool bShowPerf;
+
+    FILE *fpcapFile;
 
 //	SDL_Renderer * renderer;
 	SDL_cond *cond;
@@ -648,6 +643,8 @@ static void GFX_DrawAllRectBuffers()
     sg_nextRectBuffer = 0;
 }
 
+void GFX_DrawSimpleTexture(GLint texName);
+
 static void ShowPerfStats()
 {
 	if (sdl.bShowPerf == false)
@@ -693,41 +690,7 @@ static void ShowPerfStats()
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gc_warningTexWidth, gc_warningTexHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, sg_PerfStatsBuffer);
 		CheckGL;
 
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		CheckGL;
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		CheckGL;
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
-		CheckGL;
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
-		CheckGL;
-		glEnable(GL_BLEND);
-		CheckGL;
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		CheckGL;
-		sdl.glUseProgram(sdl.progSimple);
-		CheckGL;
-		glEnable(GL_BLEND);
-		CheckGL;
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		CheckGL;
-
-		sdl.glUniform1f(sdl.simpleFadeFactorAddr, 1.0);
-		CheckGL;
-		sdl.glUniform1i(sdl.simpleTexUnitAddr, 0);
-		CheckGL;
-
-		sdl.glEnableVertexAttribArray(sdl.simplePositionAddr);
-		CheckGL;
-
-		glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
-		CheckGL;
-
-		sdl.glDisableVertexAttribArray(sdl.simplePositionAddr);
-		CheckGL;
-
-		glDisable(GL_BLEND);
-		CheckGL;
+        GFX_DrawSimpleTexture(sg_PerfStatsTexture);
 	}
 }
 
@@ -1295,6 +1258,13 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
 		glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
 		CheckGL;
 
+/*
+        if (GCC_UNLIKELY(CaptureState & (CAPTURE_IMAGE|CAPTURE_VIDEO)))
+        {
+            sdl.fpcapFile = fopen("screenshot.raw", "wb");
+        }
+*/
+
 		return true;
 #endif
 	default:
@@ -1319,6 +1289,13 @@ void GFX_LineHandler8(const void * src)
 					sdl.draw.width, 1,
 					GL_LUMINANCE, GL_UNSIGNED_BYTE,
 					src);
+
+/*
+    if (sdl.fpcapFile)
+    {
+        fwrite(src, 1, sdl.draw.width, sdl.fpcapFile);
+    }
+*/
 }
 
 void GFX_LineHandler16(const void * src)
@@ -1358,6 +1335,16 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 	if (!sdl.updating)
 		return;
 	sdl.updating=false;
+
+/*
+	if (sdl.fpcapFile)
+	{
+        fclose(sdl.fpcapFile);
+        sdl.fpcapFile = NULL;
+        CaptureState &= ~CAPTURE_IMAGE;
+	}
+*/
+
 	switch (sdl.desktop.type) {
 #if C_OPENGL
 	case SCREEN_OPENGL:
@@ -1470,6 +1457,11 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 				sdl.glDisableVertexAttribArray(sdl.fbPositionAddr);
                 CheckGL;
 			}
+			else
+			{
+                sdl.glActiveTexture(GL_TEXTURE0);
+                CheckGL;
+			}
 
 			ShowPerfStats();
 
@@ -1491,8 +1483,38 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 	}
 }
 
+// static FILE *sg_palFile = NULL;
+// static void *sg_palWriteThroughCache = NULL;
 
 void GFX_SetPalette(Bitu start,Bitu count,GFX_PalEntry * entries) {
+/*
+    if (sg_palFile == NULL)
+    {
+        sg_palFile = fopen("/home/odroid/pal_dump.txt", "w");
+    }
+
+    if (sg_palFile)
+    {
+        fprintf(sg_palFile, "Frame %d received %d palette entries (%d - %d):\n", sg_GFXUpdateCounter, count, start, start + count);
+        for (int i = 0; i < count; i++)
+        {
+            fprintf(sg_palFile, "\t%d: (%d, %d, %d)\n", i + start, entries[i].r, entries[i].g, entries[i].b);
+            fflush(sg_palFile);
+        }
+    }
+    if (sg_palWriteThroughCache == NULL)
+    {
+        if (sdl.use16bitTextures)
+        {
+            sg_palWriteThroughCache = malloc(256 * sizeof(GLushort));
+        }
+        else
+        {
+            sg_palWriteThroughCache = malloc(256 * sizeof(GFX_PalEntry));
+        }
+    }
+*/
+
 	// The palette is just a 1-dimensional texture.
 	// It's the 2nd texture, stored at index 1
 	//
@@ -1503,6 +1525,7 @@ void GFX_SetPalette(Bitu start,Bitu count,GFX_PalEntry * entries) {
 
 	if (sdl.use16bitTextures)
 	{
+//		GLushort *pTempBuf = ((GLushort*)sg_palWriteThroughCache) + start;
 		GLushort *pTempBuf = (GLushort*)alloca(count * sizeof(GLushort));
 
 		for (unsigned i = 0; i < count; i++)
@@ -1517,23 +1540,28 @@ void GFX_SetPalette(Bitu start,Bitu count,GFX_PalEntry * entries) {
 		}
 
 		glTexSubImage2D(GL_TEXTURE_2D, 0, start, 0, count, 1, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, pTempBuf);
+//        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, sg_palWriteThroughCache);
 	}
 	else
 	{
+//        memcpy(((GLuint*)sg_palWriteThroughCache) + start, entries, count * sizeof(GFX_PalEntry));
+//        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*)sg_palWriteThroughCache);
 		glTexSubImage2D(GL_TEXTURE_2D, 0, start, 0, count, 1, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*)entries);
 	}
 	CheckGL;
 }
 
+/*
 Bitu GFX_GetRGB(Bit8u red,Bit8u green,Bit8u blue) {
 	switch (sdl.desktop.type) {
 	case SCREEN_OPENGL:
-//		return ((red << 0) | (green << 8) | (blue << 16)) | (255 << 24);
+		return ((red << 0) | (green << 8) | (blue << 16)) | (255 << 24);
 		//USE BGRA
-		return ((blue << 0) | (green << 8) | (red << 16)) | (255 << 24);
+//		return ((blue << 0) | (green << 8) | (red << 16)) | (255 << 24);
 	}
 	return 0;
 }
+*/
 
 void GFX_Stop() {
 	if (sdl.updating)
@@ -1543,6 +1571,13 @@ void GFX_Stop() {
 
 void GFX_Start() {
 	sdl.active=true;
+
+	if (sdl.window && sdl.context)
+	{
+        SDL_GL_MakeCurrent(sdl.window, sdl.context);
+        glViewport(0, 0, sdl.clip.w, sdl.clip.h);
+        CheckGL;
+	}
 }
 
 static void GUI_ShutDown(Section * /*sec*/) {
@@ -1629,8 +1664,14 @@ static void GUI_ShutDown(Section * /*sec*/) {
 			SDL_GL_DeleteContext(sdl.context);
 		}
 		SDL_DestroyWindow(sdl.window);
-		// SDL_DestroyRenderer(sdl.renderer);
 	}
+
+/*
+    if (sg_palFile)
+    {
+        fclose(sg_palFile);
+    }
+*/
 }
 
 static void KillSwitch(bool pressed) {
@@ -1968,7 +2009,7 @@ static void GUI_StartUp(Section * sec) {
 			}
 		}
 	}
-	sdl.desktop.doublebuf=section->Get_bool("fulldouble");
+//	sdl.desktop.doublebuf=section->Get_bool("fulldouble");
 	if (!sdl.desktop.full.width) {
 #ifdef WIN32
 		sdl.desktop.full.width=(Bit16u)GetSystemMetrics(SM_CXSCREEN);
@@ -1997,11 +2038,6 @@ static void GUI_StartUp(Section * sec) {
 	sdl.desktop.want_type=SCREEN_OPENGL;
 	sdl.opengl.bilinear=true;
 
-#ifndef WIN32
-	clock_getres(CLOCK_MONOTONIC_RAW, &sdl.clockRes);
-    LOG_MSG("Clock resolution is %d seconds, %d nanoseconds", int(sdl.clockRes.tv_sec), int(sdl.clockRes.tv_nsec));
-#endif
-
 #if C_OPENGL
    if(sdl.desktop.want_type==SCREEN_OPENGL){ /* OPENGL is requested */
 	sdl.opengl.framebuf=0;
@@ -2018,7 +2054,9 @@ static void GUI_StartUp(Section * sec) {
 
 	// Require a GPU
 	//
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
 	SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
+//	SDL_GL_SetAttribute(SDL_GL_SHAREDCONTEXT, 1);
 
 	sdl.window = SDL_CreateWindow("DosBox", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 400, SDL_WINDOW_OPENGL);
 	// SDL_CreateWindowAndRenderer(640, 480, SDL_WINDOW_OPENGL, &sdl.window, &sdl.renderer);
@@ -2079,6 +2117,7 @@ static void GUI_StartUp(Section * sec) {
     sdl.glBindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC)SDL_GL_GetProcAddress("glBindFramebuffer");
     sdl.glFramebufferTexture2D = (PFNGLFRAMEBUFFERTEXTURE2DPROC)SDL_GL_GetProcAddress("glFramebufferTexture2D");
     sdl.glCheckFramebufferStatus = (PFNGLCHECKFRAMEBUFFERSTATUSPROC)SDL_GL_GetProcAddress("glCheckFramebufferStatus");
+//    sdl.glReadPixels = (PFNGLREADPIXELSPROC)SDL_GL_GetProcAddress("glReadPixels");
 
 	sdl.vertBuffer = CreateObjectBuffer(GL_ARRAY_BUFFER, gc_vertex_buffer_data, sizeof(gc_vertex_buffer_data));
 	CheckGL;
@@ -2590,8 +2629,8 @@ void Config_Add_SDL() {
 	Pbool = sdl_sec->Add_bool("fullscreen",Property::Changeable::DBoxAlways,false);
 	Pbool->Set_help("Start dosbox directly in fullscreen. (Press ALT-Enter to go back)");
 
-	Pbool = sdl_sec->Add_bool("fulldouble",Property::Changeable::DBoxAlways,false);
-	Pbool->Set_help("Use double buffering in fullscreen. It can reduce screen flickering, but it can also result in a slow DOSBox.");
+//	Pbool = sdl_sec->Add_bool("fulldouble",Property::Changeable::DBoxAlways,false);
+//	Pbool->Set_help("Use double buffering in fullscreen. It can reduce screen flickering, but it can also result in a slow DOSBox.");
 
 	Pstring = sdl_sec->Add_string("fullresolution",Property::Changeable::DBoxAlways,"original");
 	Pstring->Set_help("What resolution to use for fullscreen: original or fixed size (e.g. 1024x768).\n"
@@ -3054,4 +3093,50 @@ void GFX_GetSize(int &width, int &height, bool &fullscreen) {
 	width = sdl.draw.width;
 	height = sdl.draw.height;
 	fullscreen = sdl.desktop.fullscreen;
+}
+
+SDL_GLContext GFX_GetGLContext()
+{
+    return sdl.context;
+}
+
+
+void GFX_DrawSimpleTexture(GLint texName)
+{
+    sdl.glActiveTexture(GL_TEXTURE0);
+    CheckGL;
+    glBindTexture(GL_TEXTURE_2D, texName);
+    CheckGL;
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    CheckGL;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    CheckGL;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
+    CheckGL;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
+    CheckGL;
+    glEnable(GL_BLEND);
+    CheckGL;
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    CheckGL;
+    sdl.glUseProgram(sdl.progSimple);
+    CheckGL;
+
+    sdl.glUniform1f(sdl.simpleFadeFactorAddr, 1.0);
+    CheckGL;
+    sdl.glUniform1i(sdl.simpleTexUnitAddr, 0);
+    CheckGL;
+
+    sdl.glEnableVertexAttribArray(sdl.simplePositionAddr);
+    CheckGL;
+
+    glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void*)0);
+    CheckGL;
+
+    sdl.glDisableVertexAttribArray(sdl.simplePositionAddr);
+    CheckGL;
+
+    glDisable(GL_BLEND);
+    CheckGL;
 }

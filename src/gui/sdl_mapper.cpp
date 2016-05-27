@@ -38,6 +38,16 @@
 #include "mapper.h"
 #include "setup.h"
 
+#if C_OPENGL
+#ifdef WIN32
+#include "SDL_opengl.h"
+#include "SDL_opengl_glext.h"
+#else
+#include "SDL2/SDL_opengl.h"
+#include "SDL2/SDL_opengl_glext.h"
+#endif
+#endif // C_OPENGL
+
 enum {
 	CLR_BLACK=0,
 	CLR_WHITE=1,
@@ -466,7 +476,7 @@ public:
 		key = _key;
 	}
 	void BindName(char * buf) {
-		sprintf(buf,"Key %s",SDL_GetKeyName(MapSDLCode((Bitu)key)));
+		sprintf(buf,"Key %s",SDL_GetKeyName(SDL_GetKeyFromScancode((SDL_Scancode)key)));
 	}
 	void ConfigName(char * buf) {
 		sprintf(buf,"key %d",MapSDLCode((Bitu)key));
@@ -1680,9 +1690,6 @@ static void DrawButtons(void) {
 		(*but_it)->Draw();
 	}
 	SDL_UnlockSurface(mapper.surface);
-	SDL_Texture *pTex = SDL_CreateTextureFromSurface(mapper.renderer, mapper.surface);
-	SDL_RenderCopy(mapper.renderer, pTex, NULL, NULL);
-	SDL_RenderPresent(mapper.renderer);
 }
 
 static CKeyEvent * AddKeyButtonEvent(Bitu x,Bitu y,Bitu dx,Bitu dy,char const * const title,char const * const entry,KBD_KEYS key) {
@@ -2321,6 +2328,11 @@ void MAPPER_Run(bool pressed) {
 	MAPPER_RunInternal();
 }
 
+extern SDL_GLContext GFX_GetGLContext();
+extern void GFX_DrawSimpleTexture(GLint texName);
+
+
+
 void MAPPER_RunInternal() {
 	int cursor = SDL_ShowCursor(SDL_QUERY);
 	SDL_ShowCursor(SDL_ENABLE);
@@ -2332,14 +2344,22 @@ void MAPPER_RunInternal() {
 
 	/* Be sure that there is no update in progress */
 	GFX_EndUpdate( 0 );
-	SDL_CreateWindowAndRenderer(640, 480, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN, &mapper.window, &mapper.renderer);
+
+	mapper.window = SDL_CreateWindow("Mapper", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
+
+	SDL_GL_MakeCurrent(mapper.window, GFX_GetGLContext());
+    glViewport(0, 0, 640, 480);
+
 	mapper.surface = SDL_CreateRGBSurface(0, 640, 480, 8, 0, 0, 0, 0);
-	mapper.map_pal = SDL_AllocPalette(5);
-	SDL_SetPaletteColors(mapper.map_pal, map_pal, 0, 5);
+
+    GLuint sdlTexture;
+    glGenTextures(1, &sdlTexture);
+    glBindTexture(GL_TEXTURE_2D, sdlTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 640, 480, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 0);
+
 	if (mapper.surface == NULL) E_Exit("Could not initialize video mode for mapper: %s",SDL_GetError());
 
 	/* Set some palette entries */
-	SDL_SetSurfacePalette(mapper.surface, mapper.map_pal);
 	if (last_clicked) {
 		last_clicked->SetColor(CLR_WHITE);
 		last_clicked=NULL;
@@ -2351,12 +2371,43 @@ void MAPPER_RunInternal() {
 #if defined (REDUCE_JOYSTICK_POLLING)
 	SDL_JoystickEventState(SDL_ENABLE);
 #endif
+    SDL_PixelFormat *pFmt = SDL_AllocFormat(SDL_PIXELFORMAT_RGB565);
+    GLushort *destRow = (GLushort *)alloca(640 * sizeof(GLushort));
+
 	while (!mapper.exit) {
 		if (mapper.redraw) {
 			mapper.redraw=false;
 			DrawButtons();
 		}
 		BIND_MappingEvents();
+
+        // Manually convert paletted to 16-bit
+        //
+        SDL_LockSurface(mapper.surface);
+
+        for (int y = 0; y < 480; y++)
+        {
+            GLubyte *srcRow = ((GLubyte *)mapper.surface->pixels) + (mapper.surface->pitch * y);
+
+            for (int x = 0; x < 640; x++)
+            {
+                destRow[x] = SDL_MapRGB(pFmt, map_pal[srcRow[x]].r, map_pal[srcRow[x]].r, map_pal[srcRow[x]].g);
+            }
+
+            glTexSubImage2D(GL_TEXTURE_2D, 0,
+                            0, y,
+                            640, 1,
+                            GL_RGB, GL_UNSIGNED_SHORT_5_6_5, destRow);
+        }
+
+        SDL_UnlockSurface(mapper.surface);
+
+        // Clear the screen, render current frame, and swap
+        //
+        glClear(GL_COLOR_BUFFER_BIT);
+        GFX_DrawSimpleTexture(sdlTexture);
+        SDL_GL_SwapWindow(mapper.window);
+
 		SDL_Delay(1);
 	}
 #if defined (REDUCE_JOYSTICK_POLLING)
@@ -2364,7 +2415,14 @@ void MAPPER_RunInternal() {
 #endif
 	if(mousetoggle) GFX_CaptureMouse();
 	SDL_ShowCursor(cursor);
+
+    SDL_FreeFormat(pFmt);
+    glDeleteTextures(1, &sdlTexture);
+    SDL_FreeSurface(mapper.surface);
+
 	GFX_ResetScreen();
+
+	SDL_DestroyWindow(mapper.window);
 }
 
 void MAPPER_Init(void) {
