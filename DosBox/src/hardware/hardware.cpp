@@ -51,7 +51,7 @@ static struct {
 		Bitu used;
 		Bit32u length;
 		Bit32u freq;
-	} wave; 
+	} wave;
 	struct {
 		FILE * handle;
 		Bit8u buffer[MIDI_BUF];
@@ -97,7 +97,7 @@ FILE * OpenCaptureFile(const char * type,const char * ext) {
 		Cross::CreateDir(capturedir);
 		dir=open_directory(capturedir.c_str());
 		if(!dir) {
-		
+
 			LOG_MSG("Can't open dir %s for capturing %s",capturedir.c_str(),type);
 			return 0;
 		}
@@ -110,7 +110,7 @@ FILE * OpenCaptureFile(const char * type,const char * ext) {
 	bool testRead = read_directory_first(dir, tempname, is_directory );
 	for ( ; testRead; testRead = read_directory_next(dir, tempname, is_directory) ) {
 		char * test=strstr(tempname,ext);
-		if (!test || strlen(test)!=strlen(ext)) 
+		if (!test || strlen(test)!=strlen(ext))
 			continue;
 		*test=0;
 		if (strncasecmp(tempname,file_start,strlen(file_start))!=0) continue;
@@ -135,7 +135,7 @@ static void CAPTURE_AddAviChunk(const char * tag, Bit32u size, void * data, Bit3
 	Bit8u chunk[8];Bit8u *index;Bit32u pos, writesize;
 
 	chunk[0] = tag[0];chunk[1] = tag[1];chunk[2] = tag[2];chunk[3] = tag[3];
-	host_writed(&chunk[4], size);   
+	host_writed(&chunk[4], size);
 	/* Write the actual data */
 	fwrite(chunk,1,8,capture.video.handle);
 	writesize = (size+1)&~1;
@@ -172,7 +172,7 @@ static void CAPTURE_VideoHeader() {
 #define AVIOUTw(_S_) host_writew(&avi_header[header_pos], _S_);header_pos+=2;
 #define AVIOUTd(_S_) host_writed(&avi_header[header_pos], _S_);header_pos+=4;
 		/* Try and write an avi header */
-		AVIOUT4("RIFF");                    // Riff header 
+		AVIOUT4("RIFF");                    // Riff header
 		AVIOUTd(AVI_HEADER_SIZE + capture.video.written - 8 + capture.video.indexused);
 		AVIOUT4("AVI ");
 		AVIOUT4("LIST");                    // List header
@@ -293,7 +293,7 @@ static void CAPTURE_VideoEvent(bool pressed) {
 	if (CaptureState & CAPTURE_VIDEO) {
 		/* Close the video */
 		CaptureState &= ~CAPTURE_VIDEO;
-		LOG_MSG("Stopped capturing video.");	
+		LOG_MSG("Stopped capturing video.");
 
 		/* Adds AVI header to the file */
 		CAPTURE_VideoHeader();
@@ -324,7 +324,7 @@ void CAPTURE_AddImage(Bitu width, Bitu height, Bitu bpp, Bitu pitch, Bitu flags,
 		return;
 	if (width > SCALER_MAXWIDTH)
 		return;
-	
+
 	if (CaptureState & CAPTURE_IMAGE) {
 		png_structp png_ptr;
 		png_infop info_ptr;
@@ -342,18 +342,18 @@ void CAPTURE_AddImage(Bitu width, Bitu height, Bitu bpp, Bitu pitch, Bitu flags,
 			png_destroy_write_struct(&png_ptr,(png_infopp)NULL);
 			goto skip_shot;
 		}
-	
+
 		/* Finalize the initing of png library */
 		png_init_io(png_ptr, fp);
 		png_set_compression_level(png_ptr,Z_BEST_COMPRESSION);
-		
+
 		/* set other zlib parameters */
 		png_set_compression_mem_level(png_ptr, 8);
 		png_set_compression_strategy(png_ptr,Z_DEFAULT_STRATEGY);
 		png_set_compression_window_bits(png_ptr, 15);
 		png_set_compression_method(png_ptr, 8);
 		png_set_compression_buffer_size(png_ptr, 8192);
-	
+
 		if (bpp==8) {
 			png_set_IHDR(png_ptr, info_ptr, width, height,
 				8, PNG_COLOR_TYPE_PALETTE, PNG_INTERLACE_NONE,
@@ -458,7 +458,7 @@ skip_shot:
 			capture.video.width != width ||
 			capture.video.height != height ||
 			capture.video.bpp != bpp ||
-			capture.video.fps != fps)) 
+			capture.video.fps != fps))
 		{
 			CAPTURE_VideoEvent(true);
 		}
@@ -478,7 +478,7 @@ skip_shot:
 			capture.video.codec = new VideoCodec();
 			if (!capture.video.codec)
 				goto skip_video;
-			if (!capture.video.codec->SetupCompress( width, height)) 
+			if (!capture.video.codec->SetupCompress( width, height))
 				goto skip_video;
 			capture.video.bufSize = capture.video.codec->NeededSize(width, height, format);
 			capture.video.buf = malloc( capture.video.bufSize );
@@ -643,13 +643,13 @@ static void CAPTURE_WaveEvent(bool pressed) {
 		host_writed(&wavheader[0x18],capture.wave.freq);
 		host_writed(&wavheader[0x1C],capture.wave.freq*4);
 		host_writed(&wavheader[0x28],capture.wave.length);
-		
+
 		fseek(capture.wave.handle,0,0);
 		fwrite(wavheader,1,sizeof(wavheader),capture.wave.handle);
 		fclose(capture.wave.handle);
 		capture.wave.handle=0;
 		CaptureState |= CAPTURE_WAVE;
-	} 
+	}
 	CaptureState ^= CAPTURE_WAVE;
 }
 
@@ -699,7 +699,7 @@ void CAPTURE_AddMidi(bool sysex, Bitu len, Bit8u * data) {
 		RawMidiAdd( 0xf0 );
 		RawMidiAddNumber( len );
 	}
-	for (Bitu i=0;i<len;i++) 
+	for (Bitu i=0;i<len;i++)
 		RawMidiAdd(data[i]);
 }
 
@@ -729,7 +729,7 @@ static void CAPTURE_MidiEvent(bool pressed) {
 		capture.midi.handle=0;
 		CaptureState &= ~CAPTURE_MIDI;
 		return;
-	} 
+	}
 	CaptureState ^= CAPTURE_MIDI;
 	if (CaptureState & CAPTURE_MIDI) {
 		LOG_MSG("Preparing for raw midi capture, will start with first data.");

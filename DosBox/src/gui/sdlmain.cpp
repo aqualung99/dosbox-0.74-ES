@@ -28,6 +28,7 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <assert.h>
+#include <errno.h>
 
 #include <sys/types.h>
 #ifdef WIN32
@@ -38,9 +39,6 @@
 #include "cross.h"
 #include "SDL.h"
 
-#ifdef JOEL_REMOVED
-#include <errno.h>
-#endif
 
 
 #include "dosbox.h"

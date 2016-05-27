@@ -17,14 +17,9 @@
 #include "SDL_thread.h"
 
 #if defined(C_SDL_SOUND)
-#ifndef JOEL_REMOVED
-#include "SDL_sound.h"
-#else
 #include "SDL/SDL_sound.h"
-#endif	// JOEL_REMOVED
 #endif
 
-#ifdef JOEL_REMOVED
 /** @name Frames / MSF Conversion Functions
  *  Conversion functions from frames to Minute/Second/Frames and vice versa
  */
@@ -39,7 +34,7 @@
 	*(M) = value;							\
 }
 #define MSF_TO_FRAMES(M, S, F)	((M)*60*CD_FPS+(S)*CD_FPS+(F))
-#endif	// JOEL_REMOVED
+
 
 #define RAW_SECTOR_SIZE		2352
 #define COOKED_SECTOR_SIZE	2048
@@ -73,15 +68,15 @@ public:
 	virtual bool	PlayAudioSector		(unsigned long start,unsigned long len) = 0;
 	virtual bool	PauseAudio			(bool resume) = 0;
 	virtual bool	StopAudio			(void) = 0;
-	
+
 	virtual bool	ReadSectors			(PhysPt buffer, bool raw, unsigned long sector, unsigned long num) = 0;
 
 	virtual bool	LoadUnloadMedia		(bool unload) = 0;
-	
-	virtual void	InitNewMedia		(void) {};
-};	
 
-#ifndef JOEL_REMOVED
+	virtual void	InitNewMedia		(void) {};
+};
+
+#if 0
 // SDL 2.0 doesn't have any CD-ROM support anymore
 //
 class CDROM_Interface_SDL : public CDROM_Interface
@@ -128,7 +123,7 @@ public:
 	bool	StopAudio			(void) { return true; };
 	bool	ReadSectors			(PhysPt /*buffer*/, bool /*raw*/, unsigned long /*sector*/, unsigned long /*num*/) { return true; };
 	bool	LoadUnloadMedia		(bool /*unload*/) { return true; };
-};	
+};
 
 class CDROM_Interface_Image : public CDROM_Interface
 {
@@ -139,7 +134,7 @@ private:
 		virtual int getLength() = 0;
 		virtual ~TrackFile() { };
 	};
-	
+
 	class BinaryFile : public TrackFile {
 	public:
 		BinaryFile(const char *filename, bool &error);
@@ -150,7 +145,7 @@ private:
 		BinaryFile();
 		std::ifstream *file;
 	};
-	
+
 	#if defined(C_SDL_SOUND)
 	class AudioFile : public TrackFile {
 	public:
@@ -165,7 +160,7 @@ private:
 		int lastSeek;
 	};
 	#endif
-	
+
 	struct Track {
 		int number;
 		int attr;
@@ -176,7 +171,7 @@ private:
 		bool mode2;
 		TrackFile *file;
 	};
-	
+
 public:
 	CDROM_Interface_Image		(Bit8u subUnit);
 	virtual ~CDROM_Interface_Image	(void);
@@ -195,7 +190,7 @@ public:
 	bool	LoadUnloadMedia		(bool unload);
 	bool	ReadSector		(Bit8u *buffer, bool raw, unsigned long sector);
 	bool	HasDataTrack		(void);
-	
+
 static	CDROM_Interface_Image* images[26];
 
 private:
@@ -209,12 +204,12 @@ static  struct imagePlayer {
 		SDL_mutex 	*mutex;
 		Bit8u   buffer[8192];
 		int     bufLen;
-		int     currFrame;	
+		int     currFrame;
 		int     targetFrame;
 		bool    isPlaying;
 		bool    isPaused;
 	} player;
-	
+
 	void 	ClearTracks();
 	bool	LoadIsoFile(char *filename);
 	bool	CanReadPVD(TrackFile *file, int sectorSize, bool mode2);
@@ -238,7 +233,7 @@ typedef	std::vector<Track>::iterator	track_it;
 #define WIN32_LEAN_AND_MEAN		// Exclude rarely-used stuff from Windows headers
 
 #include <windows.h>
-#include "wnaspi32.h"			// Aspi stuff 
+#include "wnaspi32.h"			// Aspi stuff
 
 class CDROM_Interface_Aspi : public CDROM_Interface
 {
@@ -259,11 +254,11 @@ public:
 	bool	PlayAudioSector		(unsigned long start,unsigned long len);
 	bool	PauseAudio			(bool resume);
 	bool	StopAudio			(void);
-	
+
 	bool	ReadSectors			(PhysPt buffer, bool raw, unsigned long sector, unsigned long num);
 
 	bool	LoadUnloadMedia		(bool unload);
-	
+
 private:
 	DWORD	GetTOC				(LPTOC toc);
 	HANDLE	OpenIOCTLFile		(char cLetter, BOOL bAsync);
@@ -272,7 +267,7 @@ private:
 	bool	ScanRegistry		(HKEY& hKeyBase);
 	BYTE	GetHostAdapter		(char* hardwareID);
 	bool	GetVendor			(BYTE HA_num, BYTE SCSI_Id, BYTE SCSI_Lun, char* szBuffer);
-		
+
 	// ASPI stuff
 	BYTE	haId;
 	BYTE	target;
@@ -309,7 +304,7 @@ public:
 	bool	PlayAudioSector		(unsigned long start,unsigned long len);
 	bool	PauseAudio			(bool resume);
 	bool	StopAudio			(void);
-	
+
 	bool	ReadSector			(Bit8u *buffer, bool raw, unsigned long sector);
 	bool	ReadSectors			(PhysPt buffer, bool raw, unsigned long sector, unsigned long num);
 
@@ -359,7 +354,7 @@ private:
 		SDL_mutex		*mutex;
 		Bit8u   buffer[8192];
 		int     bufLen;
-		int     currFrame;	
+		int     currFrame;
 		int     targetFrame;
 		bool    isPlaying;
 		bool    isPaused;
@@ -370,7 +365,7 @@ private:
 #endif /* WIN 32 */
 
 #if defined (LINUX) || defined(OS2)
-#ifndef JOEL_REMOVED
+#if 0
 // SDL 2.0 doesn't have any CD-ROM support anymore
 //
 class CDROM_Interface_Ioctl : public CDROM_Interface_SDL
@@ -385,7 +380,7 @@ public:
 private:
 	char	device_name[512];
 };
-#endif  // JOEL_REMOVED
+#endif  // 0
 #endif /* LINUX */
 
 #endif /* __CDROM_INTERFACE__ */
