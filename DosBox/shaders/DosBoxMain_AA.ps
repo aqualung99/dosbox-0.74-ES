@@ -18,7 +18,7 @@ varying vec2 tcNorm;
 // PAL() takes an 8-bit value as a U texture coordinate and does
 // a lookup into the palette texture to return RGB values for that index
 // 
-#define PAL(p)	 			texture2D(palUnit, vec2((p),0.5))
+#define PAL(p)	 			texture2D(palUnit, vec2((510.0 * (p) + 1.0) / 512.0, 0.5))
 #define LOOKUP(c)			PAL(texture2D(texUnit, (c) * uvRatio).x)
 
 
