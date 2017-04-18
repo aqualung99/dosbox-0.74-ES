@@ -613,6 +613,23 @@ static void INT10_TeletypeOutputAttr(Bit8u chr,Bit8u attr,bool useattr,Bit8u pag
 	INT10_SetCursorPos(cur_row,cur_col,page);
 }
 
+void INT10_TeletypeOutputCLS()
+{
+	BIOS_NCOLS;BIOS_NROWS;
+
+	for (int y = 0; y < nrows; y++)
+	{
+		for (int x = 0; x < ncols; x++)
+		{
+			WriteChar(x, y, 0, ' ', 0x07, true);
+		}
+	}
+
+	INT10_SetCursorPos(0, 0, 0);
+	INT10_TeletypeOutputAttr('\r', 0x07, true, 0);
+	INT10_SetCursorShape(0x06, 07);
+}
+
 void INT10_TeletypeOutputAttr(Bit8u chr,Bit8u attr,bool useattr) {
 	INT10_TeletypeOutputAttr(chr,attr,useattr,real_readb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAGE));
 }
