@@ -165,10 +165,12 @@ void DOS_Shell::DoCommand(char * line) {
 		return; \
 	}
 
+extern void INT10_TeletypeOutputCLS(void);
 void DOS_Shell::CMD_CLS(char * args) {
 	HELP("CLS");
-	reg_ax=0x0003;
-	CALLBACK_RunRealInt(0x10);
+	//reg_ax=0x0003;
+	//CALLBACK_RunRealInt(0x10);
+	INT10_TeletypeOutputCLS();
 }
 
 void DOS_Shell::CMD_DELETE(char * args) {
