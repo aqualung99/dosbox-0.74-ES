@@ -1,5 +1,7 @@
 #version 100
 
+precision mediump float;
+
 attribute vec2 position;
 uniform vec2 uvRatio;
 // The code sets the 'aspectFix' value based on the size
