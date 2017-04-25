@@ -716,8 +716,8 @@ void GFX_SetMainShader(bool bPaletted)
     CheckGL;
     sdl.palOneAddr = sdl.glGetUniformLocation(sdl.progMainToUse, "one");
     CheckGL;
-    //sdl.palTargetSizeAddr = sdl.glGetUniformLocation(sdl.progPalette, "targetSize");
-    //CheckGL;
+    sdl.palTargetSizeAddr = sdl.glGetUniformLocation(sdl.progPalette, "targetSize");
+    CheckGL;
     sdl.palUvRatioAddr = sdl.glGetUniformLocation(sdl.progMainToUse, "uvRatio");
     CheckGL;
     sdl.palAspectFixAddr = sdl.glGetUniformLocation(sdl.progMainToUse, "aspectFix");
@@ -741,9 +741,9 @@ void GFX_SetTitle(Bit32s cycles,Bits frameskip,bool paused){
 	if(cycles != -1) internal_cycles = cycles;
 	if(frameskip != -1) internal_frameskip = frameskip;
 	if(CPU_CycleAutoAdjust) {
-		sprintf(title,"DOSBox %s, Cpu speed: max %3d%% cycles, Frameskip %2d, Program: %8s",VERSION,internal_cycles,internal_frameskip,RunningProgram);
+		sprintf(title,"DOSBox %s, Cpu speed: max %3d%% cycles, Frameskip %2d, Program: %8s, Ctrl-F10 To Release Mouse",VERSION,internal_cycles,internal_frameskip,RunningProgram);
 	} else {
-		sprintf(title,"DOSBox %s, Cpu speed: %8d cycles, Frameskip %2d, Program: %8s",VERSION,internal_cycles,internal_frameskip,RunningProgram);
+		sprintf(title,"DOSBox %s, Cpu speed: %8d cycles, Frameskip %2d, Program: %8s, Ctrl-F10 To Release Mouse",VERSION,internal_cycles,internal_frameskip,RunningProgram);
 	}
 
 	if(paused) strcat(title," PAUSED");
@@ -834,16 +834,6 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 		sdl_flags |= SDL_WINDOW_OPENGL;
 	}
 	if (fixedWidth && fixedHeight) {
-		double ratio_w=(double)fixedWidth/((sdl.draw.width*sdl.draw.scalex) + 2);
-		double ratio_h=(double)fixedHeight/((sdl.draw.height*sdl.draw.scaley) + 2);
-		if ( ratio_w < ratio_h) {
-			sdl.clip.w=fixedWidth;
-			sdl.clip.h=(Bit16u)(sdl.draw.height*sdl.draw.scaley*ratio_w) + 2;
-		} else {
-			sdl.clip.w=(Bit16u)(sdl.draw.width*sdl.draw.scalex*ratio_h) + 2;
-			sdl.clip.h=(Bit16u)fixedHeight;
-		}
-
 		if (sdl.desktop.fullscreen)
 		{
 			SDL_SetWindowBordered(sdl.window, SDL_FALSE);
@@ -860,7 +850,7 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
             SDL_SetWindowSize(sdl.window, fixedWidth, fixedHeight);
             sdl.clip.w = fixedWidth;
             sdl.clip.h = fixedHeight;
-            sdl.windowAspectFor4x3 = (4.0f / 3.0f) / ((float)fixedWidth / fixedHeight);
+            sdl.windowAspectFor4x3 = (4.0f / 3.0f) / ((float)sdl.clip.w / sdl.clip.h);
 		}
 
 		if (sdl.window)
@@ -1072,12 +1062,22 @@ dosurface:
 		{
             GFX_SetMainShader(false);
 		}
-		sdl.glUniform2f(sdl.palOneAddr, 1.0f / (width + 2), 1.0f / (height + 2));
+		sdl.glUniform2f(sdl.palOneAddr, 1.0f / (width), 1.0f / (height));
 		CheckGL;
-		sdl.glUniform4f(sdl.palSourceSizeAddr, (GLfloat)width + 2, (GLfloat)height + 2, 0.0f, 0.0f);
+		sdl.glUniform4f(sdl.palSourceSizeAddr, (GLfloat)width, (GLfloat)height, 0.0f, 0.0f);
 		CheckGL;
-		sdl.glUniform2f(sdl.palUvRatioAddr, (GLfloat)(width + 2) / sdl.opengl.pow2TexWidth, (GLfloat)(height + 2) / sdl.opengl.pow2TexHeight);
+		//sdl.glUniform4f(sdl.palTargetSizeAddr, (GLfloat)sdl.draw.width + 2, (GLfloat)sdl.draw.height + 2, 0.0, 0.0);
+		//CheckGL;
+		sdl.glUniform2f(sdl.palUvRatioAddr, (GLfloat)(width) / sdl.opengl.pow2TexWidth, (GLfloat)(height) / sdl.opengl.pow2TexHeight);
 		CheckGL;
+
+		// x = y / z
+		// a = y
+		// b = x / y  =  (y / z) / y  =  (y / z) * (1 / y) =  y / yz = 1 / z
+		//
+		// x = a / z
+		// zx = a
+		//
 
 		// Don't do any aspect correction when we're rendering pass 1 of 2
 		//
