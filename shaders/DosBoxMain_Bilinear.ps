@@ -16,20 +16,19 @@ varying vec2 tcNorm;
 // a lookup into the palette texture to return RGB values for that index
 // 
 #define PAL(p)	 			texture2D(palUnit, vec2((510.0 * (p) + 1.0) / 512.0, 0.5))
-#define LOOKUP(c)			PAL(texture2D(texUnit, (c) * uvRatio).x)
+#define LOOKUP(c)			PAL(texture2D(texUnit, ((c) + one) * uvRatio).x)
 
 
-void main() {
-
-	vec2 texelPos = (tcNorm * sourceSize.xy) - vec2(0.5);
+void main() 
+{
+	vec2 texelPos = (tcNorm * sourceSize.xy) + vec2(0.5);
 
 	vec2 texelPosFrac = fract(texelPos);
-	vec2 halfPixel = one * vec2(0.5);
 
 	vec3 texel00 = LOOKUP(tcNorm).xyz;
-	vec3 texel10 = LOOKUP(tcNorm + vec2( one.x,   0)).xyz;
-	vec3 texel01 = LOOKUP(tcNorm + vec2( 0,            one.y)).xyz;
-	vec3 texel11 = LOOKUP(tcNorm + vec2( one.x,  one.y)).xyz;
+	vec3 texel10 = LOOKUP(tcNorm + vec2(one.x, 0)).xyz;
+	vec3 texel01 = LOOKUP(tcNorm + vec2(0,     one.y)).xyz;
+	vec3 texel11 = LOOKUP(tcNorm + vec2(one.x, one.y)).xyz;
 
 	vec3 yBlend0 = mix(texel00, texel01, texelPosFrac.y);
 	vec3 yBlend1 = mix(texel10, texel11, texelPosFrac.y);

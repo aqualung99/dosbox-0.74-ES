@@ -37,7 +37,7 @@ varying vec2 tcNorm;
 //
 
 #define PAL(p)	 			texture2D(palUnit, vec2((510.0 * (p) + 1.0) / 512.0, 0.5))
-#define LOOKUP(c)			PAL(texture2D(texUnit, (c) * uvRatio).x)
+#define LOOKUP(c)			PAL(texture2D(texUnit, ((c) + one) * uvRatio).x)
 
 // By applying the CRT gamma here, we make it so the colors
 // we are working with are the values that a CRT would *apparently* have

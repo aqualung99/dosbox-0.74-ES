@@ -11,22 +11,12 @@ uniform vec2 uvRatio;
 
 varying vec2 tcNorm;
 
-// Simulate a CRT gamma of 2.4.
-#define inputGamma  2.4
-
-// Compensate for the standard sRGB gamma of 2.2.
-#define outputGamma 2.2
-
+//
 // Macros.
-//
-//
-//	vec2 xy = vec2(xyTemp.x * uvRatio.x, (1.0 - uvRatio.y) - (xyTemp.y * uvRatio.y));
-//
-//
 //
 
 #define PAL(p)	 			texture2D(palUnit, vec2((510.0 * (p) + 1.0) / 512.0, 0.5))
-#define LOOKUP(c)			PAL(texture2D(texUnit, (c) * uvRatio).x)
+#define LOOKUP(c)			PAL(texture2D(texUnit, ((c) + one) * uvRatio).x)
 
 //
 // PUBLIC DOMAIN CRT STYLED SCAN-LINE SHADER
@@ -87,7 +77,11 @@ vec3 ToSrgb(vec3 c){return vec3(ToSrgb1(c.r),ToSrgb1(c.g),ToSrgb1(c.b));}
 // Also zero's off screen.
 vec3 Fetch(vec2 pos,vec2 off)
 {
-//	pos = floor((pos * res) + off) / res;
+	// pos = floor((pos * res) + off) / res;
+	// I don't have bilinear interpolation turned on
+	// during my first pass. No need to "center" the UV
+	// coordinates.
+	//
 	pos = pos + (off / res);
 
 	if(max(abs(pos.x-0.5),abs(pos.y-0.5))>0.5)
@@ -200,29 +194,11 @@ float Bar(float pos,float bar)
 // Entry.
 void main()
 {
-	// Unmodified.
-//	if(tcNorm.x < 0.333)
-//	{
-//		gl_FragColor.rgb = Fetch(tcNorm,vec2(0.0,0.0));
-//	}
-//	else
-//	{
-		vec2 pos = Warp(tcNorm);
+	vec2 pos = Warp(tcNorm);
 
-//		if(tcNorm.x < 0.666)
-//		{
-//			hardScan = -12.0;
-//			maskDark = maskLight = 1.0;
-//			// pos = Warp(tcNorm);
-//		}
-
-		gl_FragColor.rgb = Tri(pos) * Mask(gl_FragCoord.xy);
-//	}
+	gl_FragColor.rgb = Tri(pos) * Mask(gl_FragCoord.xy);
 
 	gl_FragColor.a=1.0;
-
-//	gl_FragColor.rgb *=	Bar(gl_FragCoord.x, sourceSize.x * 0.333) * 
-//						Bar(gl_FragCoord.x, sourceSize.x * 0.666);
 
 	gl_FragColor.rgb = ToSrgb(gl_FragColor.rgb);
 }
