@@ -844,6 +844,7 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 			SDL_SetWindowBordered(sdl.window, SDL_FALSE);
 			SDL_SetWindowSize(sdl.window, fixedWidth, fixedHeight);
 			SDL_SetWindowFullscreen(sdl.window, SDL_WINDOW_FULLSCREEN);
+			sdl.windowAspectFor4x3 = 1.0;
 		}
 		else
 		{
@@ -867,21 +868,18 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 					//
 					sdl.clip.w = (int)((sdl.clip.w * fourbythreeRatio) + 0.5f);
 				}
+
+				float clipRatio1 = (float)sdl.clip.w / sdl.clip.h;
+				sdl.windowAspectFor4x3 = 4.0f / (3.0f * clipRatio1);
+			}
+			else
+			{
+				sdl.windowAspectFor4x3 = 1.0;
 			}
 
             SDL_SetWindowFullscreen(sdl.window, 0);
             SDL_SetWindowBordered(sdl.window, SDL_TRUE);
             SDL_SetWindowSize(sdl.window, sdl.clip.w, sdl.clip.h);
-		}
-
-		if (sdl.bMakeSquarePixels == true)
-		{
-			float clipRatio = (float)sdl.clip.w / sdl.clip.h;
-			sdl.windowAspectFor4x3 = 4.0f / (3.0f * clipRatio);
-		}
-		else
-		{
-			sdl.windowAspectFor4x3 = 1.0;
 		}
 
 		if (sdl.window)
@@ -909,6 +907,7 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 		{
 			sdl.clip.w = (Bit16u)(sdl.draw.width);
 			sdl.clip.h=(Bit16u)(sdl.draw.height);
+			sdl.windowAspectFor4x3 = 1.0;
 		}
 		else
 		{
@@ -935,17 +934,14 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 					//
 					sdl.clip.w = (int)((sdl.clip.w * fourbythreeRatio) + 0.5f);
 				}
-			}
-		}
 
-		if (sdl.bMakeSquarePixels == true)
-		{
-			float clipRatio = (float)sdl.clip.w / sdl.clip.h;
-			sdl.windowAspectFor4x3 = 4.0f / (3.0f * clipRatio);
-		}
-		else
-		{
-			sdl.windowAspectFor4x3 = 1.0;
+				float clipRatio2 = (float)sdl.clip.w / sdl.clip.h;
+				sdl.windowAspectFor4x3 = 4.0f / (3.0f * clipRatio2);
+			}
+			else
+			{
+				sdl.windowAspectFor4x3 = 1.0;
+			}
 		}
 
 		if (sdl.desktop.fullscreen)
