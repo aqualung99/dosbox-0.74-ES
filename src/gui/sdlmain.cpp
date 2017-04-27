@@ -294,6 +294,7 @@ struct SDL_Block {
 
     bool bSmooth2Pass;
 	bool use16bitTextures;
+	bool bMakeSquarePixels;
 
     int fboWidth, fboHeight;
 
@@ -876,36 +877,46 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 
 		if (sdl.desktop.fullscreen)
 		{
-			sdl.clip.w = (Bit16u)(sdl.draw.width*sdl.draw.scalex);
-			sdl.clip.h=(Bit16u)(sdl.draw.height*sdl.draw.scaley);
+			sdl.clip.w = (Bit16u)(sdl.draw.width);
+			sdl.clip.h=(Bit16u)(sdl.draw.height);
 		}
 		else
 		{
-			sdl.clip.w=(Bit16u)(sdl.draw.width*sdl.draw.scalex) + 2;
-			sdl.clip.h=(Bit16u)(sdl.draw.height*sdl.draw.scaley) + 2;
+			sdl.clip.w=(Bit16u)(sdl.draw.width);
+			sdl.clip.h=(Bit16u)(sdl.draw.height);
 
-			// Check for non-square pixels, and adjust
-			//
-			float clipRatio = (float)sdl.clip.w / sdl.clip.h;
-			float fourbythreeRatio = (3.0f * clipRatio) / 4.0f;
-			if (clipRatio > (4.0f / 3.0f))
+			if (sdl.bMakeSquarePixels == true)
 			{
-				// Pixels are vertically stretched tall & skinny
-				// We need extra height to accomodate
+				// Check for non-square pixels, and adjust
 				//
-				sdl.clip.h = (int)((sdl.clip.h * fourbythreeRatio) + 0.5f);
-			}
-			else if (clipRatio < (4.0f / 3.0f))
-			{
-				// Pixels are horizontally stretched short & fat
-				// We need extra width to accomodate
-				//
-				sdl.clip.w = (int)((sdl.clip.w * fourbythreeRatio) + 0.5f);
+				float clipRatio = (float)sdl.clip.w / sdl.clip.h;
+				float fourbythreeRatio = (3.0f * clipRatio) / 4.0f;
+				if (clipRatio > (4.0f / 3.0f))
+				{
+					// Pixels are vertically stretched tall & skinny
+					// We need extra height to accomodate
+					//
+					sdl.clip.h = (int)((sdl.clip.h * fourbythreeRatio) + 0.5f);
+				}
+				else if (clipRatio < (4.0f / 3.0f))
+				{
+					// Pixels are horizontally stretched short & fat
+					// We need extra width to accomodate
+					//
+					sdl.clip.w = (int)((sdl.clip.w * fourbythreeRatio) + 0.5f);
+				}
 			}
 		}
 
-		float clipRatio = (float)sdl.clip.w / sdl.clip.h;
-		sdl.windowAspectFor4x3 = 4.0f / (3.0f * clipRatio);
+		if (sdl.bMakeSquarePixels == true)
+		{
+			float clipRatio = (float)sdl.clip.w / sdl.clip.h;
+			sdl.windowAspectFor4x3 = 4.0f / (3.0f * clipRatio);
+		}
+		else
+		{
+			sdl.windowAspectFor4x3 = 1.0;
+		}
 
 		if (sdl.desktop.fullscreen)
 		{
@@ -2023,6 +2034,7 @@ static void GUI_StartUp(Section * sec) {
 #endif
 	}
 	sdl.use16bitTextures = section->Get_bool("use_16bit_textures");
+	sdl.bMakeSquarePixels = section->Get_bool("make_square_pixels");
 	sdl.bShowPerf = section->Get_bool("show_perf_counters");
 	sdl.mouse.autoenable=section->Get_bool("autolock");
 	if (!sdl.mouse.autoenable) SDL_ShowCursor(SDL_DISABLE);
@@ -2711,6 +2723,9 @@ void Config_Add_SDL() {
 
 	Pbool = sdl_sec->Add_bool("use_16bit_textures", Property::Changeable::OnlyAtStart, false);
 	Pbool->Set_help("Use 16-bit textures (instead of 32-bit) where possible. Higher performance at the cost of slightly reduced color fidelity.");
+
+	Pbool = sdl_sec->Add_bool("make_square_pixels", Property::Changeable::OnlyAtStart, false);
+	Pbool->Set_help("Force the window size to always be a 4:3 aspect ratio, regardless of video resolution. When set to false, you can achieve 1:1 pixel ratios but pixel shapes will be wrong.");
 
 	Pbool = sdl_sec->Add_bool("show_perf_counters", Property::Changeable::DBoxAlways, false);
 	Pbool->Set_help("Show debug overlay with performance stats.");
