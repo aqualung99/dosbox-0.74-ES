@@ -834,24 +834,54 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 		fixedHeight = sdl.desktop.window.height;
 		sdl_flags |= SDL_WINDOW_OPENGL;
 	}
-	if (fixedWidth && fixedHeight) {
+	if (fixedWidth && fixedHeight) 
+	{
+		sdl.clip.w = fixedWidth;
+		sdl.clip.h = fixedHeight;
+
 		if (sdl.desktop.fullscreen)
 		{
 			SDL_SetWindowBordered(sdl.window, SDL_FALSE);
 			SDL_SetWindowSize(sdl.window, fixedWidth, fixedHeight);
 			SDL_SetWindowFullscreen(sdl.window, SDL_WINDOW_FULLSCREEN);
-			sdl.clip.w = fixedWidth;
-			sdl.clip.h = fixedHeight;
-			sdl.windowAspectFor4x3 = (4.0f / 3.0f) / ((float)fixedWidth / fixedHeight);
 		}
 		else
 		{
             SDL_SetWindowFullscreen(sdl.window, 0);
             SDL_SetWindowBordered(sdl.window, SDL_TRUE);
             SDL_SetWindowSize(sdl.window, fixedWidth, fixedHeight);
-            sdl.clip.w = fixedWidth;
-            sdl.clip.h = fixedHeight;
-            sdl.windowAspectFor4x3 = (4.0f / 3.0f) / ((float)sdl.clip.w / sdl.clip.h);
+
+			if (sdl.bMakeSquarePixels == true)
+			{
+				// Check for non-square pixels, and adjust
+				//
+				float clipRatio = (float)sdl.clip.w / sdl.clip.h;
+				float fourbythreeRatio = (3.0f * clipRatio) / 4.0f;
+				if (clipRatio > (4.0f / 3.0f))
+				{
+					// Pixels are vertically stretched tall & skinny
+					// We need extra height to accomodate
+					//
+					sdl.clip.h = (int)((sdl.clip.h * fourbythreeRatio) + 0.5f);
+				}
+				else if (clipRatio < (4.0f / 3.0f))
+				{
+					// Pixels are horizontally stretched short & fat
+					// We need extra width to accomodate
+					//
+					sdl.clip.w = (int)((sdl.clip.w * fourbythreeRatio) + 0.5f);
+				}
+			}
+		}
+
+		if (sdl.bMakeSquarePixels == true)
+		{
+			float clipRatio = (float)sdl.clip.w / sdl.clip.h;
+			sdl.windowAspectFor4x3 = 4.0f / (3.0f * clipRatio);
+		}
+		else
+		{
+			sdl.windowAspectFor4x3 = 1.0;
 		}
 
 		if (sdl.window)
