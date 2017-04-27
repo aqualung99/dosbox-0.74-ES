@@ -847,10 +847,6 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 		}
 		else
 		{
-            SDL_SetWindowFullscreen(sdl.window, 0);
-            SDL_SetWindowBordered(sdl.window, SDL_TRUE);
-            SDL_SetWindowSize(sdl.window, fixedWidth, fixedHeight);
-
 			if (sdl.bMakeSquarePixels == true)
 			{
 				// Check for non-square pixels, and adjust
@@ -872,6 +868,10 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 					sdl.clip.w = (int)((sdl.clip.w * fourbythreeRatio) + 0.5f);
 				}
 			}
+
+            SDL_SetWindowFullscreen(sdl.window, 0);
+            SDL_SetWindowBordered(sdl.window, SDL_TRUE);
+            SDL_SetWindowSize(sdl.window, sdl.clip.w, sdl.clip.h);
 		}
 
 		if (sdl.bMakeSquarePixels == true)
