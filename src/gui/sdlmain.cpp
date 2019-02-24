@@ -295,6 +295,7 @@ struct SDL_Block {
     bool bSmooth2Pass;
 	bool use16bitTextures;
 	bool bMakeSquarePixels;
+	bool bEnableVsync;
 
     int fboWidth, fboHeight;
 
@@ -312,7 +313,8 @@ struct SDL_Block {
 		bool autoenable;
 		bool requestlock;
 		bool locked;
-		Bitu sensitivity;
+		Bitu sensitivity_x;
+		Bitu sensitivity_y;
 	} mouse;
 	SDL_Rect updateRects[1024];
 	Bitu num_joysticks;
@@ -505,6 +507,7 @@ static float sg_picAbs = 0.0f, sg_cpuAbs = 0.0f, sg_callbackAbs = 0.0f, sg_windo
 static Uint64 sg_fpsCounter;
 static float sg_fps = 0.0f;
 
+// static GFX_PalEntry sg_pendingPaletteBuffer[256] = { 0 };
 
 static inline void OutputCharGL(Bitu x, Bitu y, char c, Bit32u colForeground, Bit32u colBackground, GLubyte *pDestBuffer)
 {
@@ -841,10 +844,20 @@ static SDL_Window * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 
 		if (sdl.desktop.fullscreen)
 		{
-			SDL_SetWindowBordered(sdl.window, SDL_FALSE);
-			SDL_SetWindowSize(sdl.window, fixedWidth, fixedHeight);
-			SDL_SetWindowFullscreen(sdl.window, SDL_WINDOW_FULLSCREEN);
-			sdl.windowAspectFor4x3 = 1.0;
+			if (sdl.bMakeSquarePixels == true)
+			{
+				SDL_SetWindowBordered(sdl.window, SDL_FALSE);
+				SDL_SetWindowSize(sdl.window, fixedWidth, fixedHeight);
+				SDL_SetWindowFullscreen(sdl.window, SDL_WINDOW_FULLSCREEN);
+				sdl.windowAspectFor4x3 = 3.0 / 4.0;
+			}
+			else
+			{
+				SDL_SetWindowBordered(sdl.window, SDL_FALSE);
+				SDL_SetWindowSize(sdl.window, fixedWidth, fixedHeight);
+				SDL_SetWindowFullscreen(sdl.window, SDL_WINDOW_FULLSCREEN);
+				sdl.windowAspectFor4x3 = 1.0;
+			}
 		}
 		else
 		{
@@ -971,6 +984,10 @@ Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,G
 	if (sdl.updating)
 		GFX_EndUpdate( 0 );
 
+	char tmpBuf[1024];
+	sprintf(tmpBuf, "Using DOS framebuffer size of %d x %d", width, height);
+	OutputDebugString(tmpBuf);
+
 	sdl.draw.width=width;
 	sdl.draw.height=height;
 	sdl.draw.callback=callback;
@@ -1003,7 +1020,7 @@ dosurface:
 		}
 		SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
 
-        SDL_GL_SetSwapInterval(1);
+        SDL_GL_SetSwapInterval(sdl.bEnableVsync ? 1 : 0);
 
 		GFX_SetupSurfaceScaled(0,0);
 		if ( (sdl.window == NULL) || SDL_BITSPERPIXEL(SDL_GetWindowPixelFormat(sdl.window)) < 15) {
@@ -1288,6 +1305,7 @@ bool GFX_StartUpdate(Bit8u * & pixels,Bitu & pitch) {
         }
 
 		glClear(GL_COLOR_BUFFER_BIT);
+		CheckGL;
 		sdl.glActiveTexture(GL_TEXTURE0);
 		CheckGL;
 		glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
@@ -1396,6 +1414,15 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 			CheckGL;
 			glBindTexture(GL_TEXTURE_2D, sdl.texPalette);
 			CheckGL;
+			//if (sdl.use16bitTextures)
+			//{
+			//	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 256, 1, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, sg_pendingPaletteBuffer);
+			//}
+			//else
+			//{
+			//	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, sg_pendingPaletteBuffer);
+			//}
+			//CheckGL;
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
             CheckGL;
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -1560,7 +1587,6 @@ void GFX_SetPalette(Bitu start,Bitu count,GFX_PalEntry * entries) {
 
 	if (sdl.use16bitTextures)
 	{
-//		GLushort *pTempBuf = ((GLushort*)sg_palWriteThroughCache) + start;
 		GLushort *pTempBuf = (GLushort*)alloca(count * sizeof(GLushort));
 
 		for (unsigned i = 0; i < count; i++)
@@ -1574,13 +1600,12 @@ void GFX_SetPalette(Bitu start,Bitu count,GFX_PalEntry * entries) {
 						  ((GLushort)(entries[i].b >> 3) << 0);
 		}
 
+		//memcpy(((GLushort*)sg_pendingPaletteBuffer) + start, pTempBuf, count * sizeof(GLushort));
 		glTexSubImage2D(GL_TEXTURE_2D, 0, start, 0, count, 1, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, pTempBuf);
-//        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, sg_palWriteThroughCache);
 	}
 	else
 	{
-//        memcpy(((GLuint*)sg_palWriteThroughCache) + start, entries, count * sizeof(GFX_PalEntry));
-//        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*)sg_palWriteThroughCache);
+		//memcpy(sg_pendingPaletteBuffer + start, entries, count * sizeof(GFX_PalEntry));
 		glTexSubImage2D(GL_TEXTURE_2D, 0, start, 0, count, 1, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*)entries);
 	}
 	CheckGL;
@@ -2059,13 +2084,17 @@ static void GUI_StartUp(Section * sec) {
 		sdl.desktop.full.height=768;
 #endif
 	}
+	sdl.bEnableVsync = section->Get_bool("vsync");
 	sdl.use16bitTextures = section->Get_bool("use_16bit_textures");
 	sdl.bMakeSquarePixels = section->Get_bool("make_square_pixels");
 	sdl.bShowPerf = section->Get_bool("show_perf_counters");
 	sdl.mouse.autoenable=section->Get_bool("autolock");
 	if (!sdl.mouse.autoenable) SDL_ShowCursor(SDL_DISABLE);
 	sdl.mouse.autolock=false;
-	sdl.mouse.sensitivity=section->Get_int("sensitivity");
+	sdl.mouse.sensitivity_x = section->Get_int("sensitivity_x");
+	sdl.mouse.sensitivity_y = section->Get_int("sensitivity_y");
+//	sdl.mouse.sensitivity_x=sdl.mouse.sensitivity_y=section->Get_int("sensitivity");
+
 	std::string output=section->Get_string("output");
 
 	/* Setup Mouse correctly if fullscreen */
@@ -2094,7 +2123,7 @@ static void GUI_StartUp(Section * sec) {
 	SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
 //	SDL_GL_SetAttribute(SDL_GL_SHAREDCONTEXT, 1);
 
-	sdl.window = SDL_CreateWindow("DosBox", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 400, SDL_WINDOW_OPENGL);
+	sdl.window = SDL_CreateWindow("DosBox", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 400, SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE);
 	// SDL_CreateWindowAndRenderer(640, 480, SDL_WINDOW_OPENGL, &sdl.window, &sdl.renderer);
 
 	sdl.context = SDL_GL_CreateContext(sdl.window);
@@ -2452,11 +2481,22 @@ void Mouse_AutoLock(bool enable) {
 
 static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
 	if (sdl.mouse.locked || !sdl.mouse.autoenable)
-		Mouse_CursorMoved((float)motion->xrel*sdl.mouse.sensitivity/100.0f,
-						  (float)motion->yrel*sdl.mouse.sensitivity/100.0f,
-						  (float)(motion->x-sdl.clip.x)/(sdl.clip.w-1)*sdl.mouse.sensitivity/100.0f,
-						  (float)(motion->y-sdl.clip.y)/(sdl.clip.h-1)*sdl.mouse.sensitivity/100.0f,
+	{
+		float xRel = (float)motion->xrel*sdl.mouse.sensitivity_x/100.0f;
+		float yRel = (float)motion->yrel*sdl.mouse.sensitivity_y/100.0f;
+		float xAbs = (float)(motion->x-sdl.clip.x)/(sdl.clip.w-1)*sdl.mouse.sensitivity_x/100.0f;
+		float yAbs = (float)(motion->y-sdl.clip.y)/(sdl.clip.h-1)*sdl.mouse.sensitivity_y/100.0f;
+
+		Mouse_CursorMoved(xRel, yRel,
+						  xAbs, yAbs,
 						  sdl.mouse.locked);
+//		char tmpBuf[1024];
+//		sprintf(tmpBuf, "clip.y=%d\tclip.h=%d\n", sdl.clip.y, sdl.clip.h);
+//		OutputDebugString(tmpBuf);
+
+//		sprintf(tmpBuf, "yrel:%d\ty:%d\tyAbs:%.2f\tyRel:%.2f\n", motion->yrel, motion->y, yAbs, yRel);
+//		OutputDebugString(tmpBuf);
+	}
 }
 
 static void HandleMouseButton(SDL_MouseButtonEvent * button) {
@@ -2689,9 +2729,13 @@ void Config_Add_SDL() {
 	Pbool = sdl_sec->Add_bool("autolock",Property::Changeable::DBoxAlways,true);
 	Pbool->Set_help("Mouse will automatically lock, if you click on the screen. (Press CTRL-F10 to unlock)");
 
-	Pint = sdl_sec->Add_int("sensitivity",Property::Changeable::DBoxAlways,100);
+	Pint = sdl_sec->Add_int("sensitivity_x",Property::Changeable::DBoxAlways,100);
 	Pint->SetMinMax(1,1000);
-	Pint->Set_help("Mouse sensitivity.");
+	Pint->Set_help("Mouse sensitivity, x-axis.");
+
+	Pint = sdl_sec->Add_int("sensitivity_y",Property::Changeable::DBoxAlways,100);
+	Pint->SetMinMax(1,1000);
+	Pint->Set_help("Mouse sensitivity, y-axis.");
 
 	Pbool = sdl_sec->Add_bool("waitonerror",Property::Changeable::DBoxAlways, true);
 	Pbool->Set_help("Wait before closing the console if dosbox has an error.");
@@ -2752,6 +2796,9 @@ void Config_Add_SDL() {
 
 	Pbool = sdl_sec->Add_bool("make_square_pixels", Property::Changeable::OnlyAtStart, false);
 	Pbool->Set_help("Force the window size to always be a 4:3 aspect ratio, regardless of video resolution. When set to false, you can achieve 1:1 pixel ratios but pixel shapes will be wrong.");
+
+	Pbool = sdl_sec->Add_bool("vsync", Property::Changeable::OnlyAtStart, false);
+	Pbool->Set_help("True to enable Vsync; false to disable vsync. DOSBox video emulation still limits refresh rate");
 
 	Pbool = sdl_sec->Add_bool("show_perf_counters", Property::Changeable::DBoxAlways, false);
 	Pbool->Set_help("Show debug overlay with performance stats.");
