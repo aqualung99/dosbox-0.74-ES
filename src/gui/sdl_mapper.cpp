@@ -2253,6 +2253,20 @@ static void InitializeJoysticks(void) {
 						LOG_MSG("One joystick reported, initializing with 4axis");
 					}
 				}
+				else
+				{
+					const char *szErr = SDL_GetError();
+					SDL_version compiled;
+					SDL_version linked;
+
+					SDL_VERSION(&compiled);
+					SDL_GetVersion(&linked);
+					
+					LOG_MSG("SDL [Compiled = %d.%d.%d, Linked = %d.%d.%d] reports the following error attempting to open Joystick #1:\n%s", 
+							compiled.major, compiled.minor, compiled.patch,
+							linked.major, linked.minor, linked.patch, 
+							szErr);
+				}
 			} else {
 				joytype=JOY_NONE;
 			}
